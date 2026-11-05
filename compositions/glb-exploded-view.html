@@ -22,7 +22,9 @@
     { "id": "camera_margin", "type": "number", "role": "camera", "label": "Camera margin", "description": "Fraction of the frame left around the subject", "default": 1.12, "min": 1.0, "max": 2.0, "step": 0.02 },
     { "id": "cutaway", "type": "string", "role": "content", "label": "Cutaway axis", "description": "none | x | z — the plane cuts the model open", "default": "none" },
     { "id": "cutaway_position", "type": "number", "role": "content", "label": "Cutaway position (-1..1 of the model)", "default": 0, "min": -1, "max": 1, "step": 0.05 },
-    { "id": "background", "type": "color", "role": "style", "label": "Background", "default": "#05070d" }
+    { "id": "background", "type": "color", "role": "style", "label": "Background", "default": "#05070d" },
+    { "id": "width", "type": "number", "role": "style", "label": "Canvas width (px)", "description": "Must match the render viewport, otherwise the frame is cropped", "default": 1920, "min": 320, "max": 3840, "step": 1 },
+    { "id": "height", "type": "number", "role": "style", "label": "Canvas height (px)", "description": "Must match the render viewport, otherwise the frame is cropped", "default": 1080, "min": 240, "max": 2160, "step": 1 }
   ]'
 >
   <head>
@@ -50,12 +52,12 @@
       .gev-label {
         position: absolute;
         transform: translate(-50%, -50%);
-        padding: 6px 12px;
-        border-radius: 8px;
+        padding: calc(6px * var(--gev-scale, 1)) calc(12px * var(--gev-scale, 1));
+        border-radius: calc(8px * var(--gev-scale, 1));
         background: rgba(5, 7, 13, 0.82);
         border: 1px solid rgba(232, 236, 245, 0.28);
         color: #e8ecf5;
-        font: 500 28px/1.2 "Inter", system-ui, sans-serif;
+        font: 500 calc(28px * var(--gev-scale, 1))/1.2 "Inter", system-ui, sans-serif;
         letter-spacing: 0.01em;
         white-space: nowrap;
         pointer-events: none;
@@ -87,7 +89,9 @@
           camera_margin: 1.12,
           cutaway: "none",
           cutaway_position: 0,
-          background: "#05070d"
+          background: "#05070d",
+          width: 1920,
+          height: 1080
         };
         var scoped = {};
         try {
@@ -139,14 +143,26 @@
       const host = window.__glbExplodedView;
       const V = host.vars;
       const root = document.getElementById("gev-root");
-      const W = 1920;
-      const H = 1080;
+      /* The canvas size is pinned by variables, not by the window: the frame
+         size must be reproducible. It MUST match the capture viewport, or the
+         frame is cropped to the top-left corner of a larger canvas. */
+      const W = Number(V.width) || 1920;
+      const H = Number(V.height) || 1080;
+      document.documentElement.style.width = W + "px";
+      document.documentElement.style.height = H + "px";
+      document.body.style.width = W + "px";
+      document.body.style.height = H + "px";
+      root.style.width = W + "px";
+      root.style.height = H + "px";
+      // The label chrome scales with the frame, so a 720p frame does not get
+      // 1080p-sized labels covering the subject.
+      root.style.setProperty("--gev-scale", String(H / 1080));
 
       const canvas = document.createElement("canvas");
       root.appendChild(canvas);
       const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
       renderer.setPixelRatio(1);
-      renderer.setSize(W, H, false);
+      renderer.setSize(W, H, true);
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.localClippingEnabled = true;
 
@@ -348,9 +364,14 @@
 
       function measurePose(explodeT) {
         applyExplode(explodeT);
+        // World matrices must be refreshed before measuring: Box3 reads
+        // matrixWorld, and applyExplode only moves the nodes. Without this the
+        // exploded pose is measured in the stale (assembled) transforms and the
+        // camera never pulls back.
+        modelRoot.updateMatrixWorld(true);
         const box = new THREE.Box3().setFromObject(modelRoot);
         const sphere = box.getBoundingSphere(new THREE.Sphere());
-        return { center: sphere.center.clone(), radius: sphere.radius };
+        return { center: sphere.center.clone(), radius: sphere.radius, box: box.clone() };
       }
 
       const poseAssembled = measurePose(0);
@@ -358,32 +379,65 @@
       const poseFixed =
         ZOOM_MODE === "assembled" ? poseAssembled : ZOOM_MODE === "exploded" ? poseExploded : null;
 
+      /* The camera frames the pose of the CURRENT frame: the subject always
+         fills the frame and never leaves it, at any explode amount. It is a
+         pure function of time — the pose at t is a pure function of t, and the
+         fit is measured from that pose.
+
+         The fit is computed on the box, not on its bounding sphere: a sphere
+         around a tall, narrow body wastes most of the frame (the body of the
+         CT occupies ~25 % of the width but 100 % of the height). */
+      function currentBox() {
+        modelRoot.updateMatrixWorld(true);
+        return new THREE.Box3().setFromObject(modelRoot);
+      }
+
+      /* Distance at which every corner of `box` projects inside the frustum.
+         Pure arithmetic on the 8 corners — no iteration, no heuristics. */
+      function fitDistance(box, dir, fov, aspect, margin) {
+        const tanY = Math.tan((fov * Math.PI) / 180 / 2);
+        const worldUp = new THREE.Vector3(0, 1, 0);
+        const up = worldUp.clone().addScaledVector(dir, -worldUp.dot(dir)).normalize();
+        const right = new THREE.Vector3().crossVectors(up, dir).normalize();
+        const half = box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+        let d = 0;
+        for (let i = 0; i < 8; i++) {
+          const o = new THREE.Vector3(
+            i & 1 ? half.x : -half.x,
+            i & 2 ? half.y : -half.y,
+            i & 4 ? half.z : -half.z
+          );
+          const x = o.dot(right);
+          const y = o.dot(up);
+          const z = o.dot(dir);
+          // depth of the corner along the view axis is (d - z), so the
+          // constraint |x| <= tanX * (d - z) gives d >= |x| / tanX + z.
+          d = Math.max(d, Math.abs(x) / (tanY * aspect) + z, Math.abs(y) / tanY + z);
+        }
+        return Math.max(0.001, d * margin);
+      }
+
       function updateCamera(t) {
-        const raw = Math.min(1, Math.max(0, (t - explodeStart) / explodeDuration));
-        const k = easeInOutCubic(raw);
-        const center = poseFixed
-          ? poseFixed.center
-          : poseAssembled.center.clone().lerp(poseExploded.center, k);
-        const radius = poseFixed
-          ? poseFixed.radius
-          : poseAssembled.radius + (poseExploded.radius - poseAssembled.radius) * k;
+        applyExplode(t);
+        const box = currentBox();
+        const center = poseFixed ? poseFixed.center : box.getCenter(new THREE.Vector3());
         camera.fov = Number(V.camera_fov) || 38;
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
-        const fov = (camera.fov * Math.PI) / 180;
-        const distance = (radius * MARGIN) / Math.sin(fov / 2);
         const orbit = ((Number(V.camera_orbit) || 0) * Math.PI) / 180;
         const dir = new THREE.Vector3(
           Math.sin(orbit) * 0.62 + 0.55,
           0.35,
           Math.cos(orbit) * 0.75
         ).normalize();
+        const fitBox = poseFixed ? poseFixed.box : box;
+        const distance = fitDistance(fitBox, dir, camera.fov, camera.aspect, MARGIN);
         camera.position.copy(center).addScaledVector(dir, distance);
         camera.lookAt(center);
         camera.updateMatrixWorld();
         fitInfo = {
           center: center.toArray(),
-          radius: radius,
+          size: box.getSize(new THREE.Vector3()).toArray(),
           distance: distance,
           fov: camera.fov,
           aspect: camera.aspect,
@@ -448,8 +502,12 @@
               guard += 1;
             }
           }
-          placed.push({ cx: m.x, cy: top + m.h / 2, w: m.w, h: m.h });
-          m.item.el.style.left = `${m.x}px`;
+          // Keep the label inside the frame: a label pushed out of the
+          // viewport is worse than a label slightly off its part.
+          top = Math.min(Math.max(8, top), Math.max(8, H - m.h - 8));
+          const x = Math.min(Math.max(m.w / 2 + 8, m.x), Math.max(m.w / 2 + 8, W - m.w / 2 - 8));
+          placed.push({ cx: x, cy: top + m.h / 2, w: m.w, h: m.h });
+          m.item.el.style.left = `${x}px`;
           m.item.el.style.top = `${top + m.h / 2}px`;
         });
       }
@@ -477,7 +535,11 @@
          three.js internals. */
       host.debug = {
         THREE: THREE,
-        fit: fitInfo,
+        // A getter, not a value: fitInfo is replaced on every frame, so a
+        // captured reference would report the fit of the first frame only.
+        get fit() {
+          return fitInfo;
+        },
         parts: parts,
         plan: plan,
         scene: scene,

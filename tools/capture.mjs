@@ -55,8 +55,8 @@ const outDir = path.resolve(arg("out", "out/frames"));
 const fps = Number(arg("fps", 30));
 const durationArg = arg("duration");
 const duration = durationArg != null ? Number(durationArg) : null;
-const width = Number(arg("width", 1920));
-const height = Number(arg("height", 1080));
+const widthArg = arg("width");
+const heightArg = arg("height");
 const workers = Math.max(1, Number(arg("workers", 4)));
 const browserPath = arg("browser");
 const cdpUrl = arg("cdp");
@@ -78,6 +78,19 @@ if (recipePath) {
 if (!compositionUrl) {
   console.error("capture: need --recipe or --url");
   process.exit(2);
+}
+
+/* Frame size: pinned by the recipe (or CLI), and passed to the composition as
+   variables so the canvas matches the viewport exactly. A mismatch crops the
+   frame to the top-left corner of a bigger canvas — silent, and very visible. */
+const width = widthArg != null ? Number(widthArg) : Number(recipe?.width) || 1920;
+const height = heightArg != null ? Number(heightArg) : Number(recipe?.height) || 1080;
+if (variables.width == null) variables.width = width;
+if (variables.height == null) variables.height = height;
+if (Number(variables.width) !== width || Number(variables.height) !== height) {
+  console.warn(
+    `capture: viewport ${width}x${height} != composition ${variables.width}x${variables.height} — the frame will be cropped`
+  );
 }
 
 /* -------------------------------------------------------- frame list ---- */
@@ -195,6 +208,18 @@ async function captureWorker(puppeteer, browser, url, list, dir, label) {
       await Promise.all(keys.map((k) => window.__hf.buildReady[k]));
     }
   });
+
+  // The composition canvas must match the viewport, otherwise the capture is a
+  // crop of a larger canvas instead of the frame.
+  const canvasSize = await page.evaluate(() => {
+    const c = document.querySelector("canvas");
+    return c ? { w: c.width, h: c.height } : null;
+  });
+  if (canvasSize && (canvasSize.w !== width || canvasSize.h !== height)) {
+    console.error(
+      `[${label}] canvas ${canvasSize.w}x${canvasSize.h} != viewport ${width}x${height} — frames will be cropped`
+    );
+  }
 
   const results = [];
   for (const frame of list) {

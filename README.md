@@ -110,3 +110,22 @@ tools/fetch-assets.mjs, verify-assets.mjs
 tools/glb-inventory.mjs                catalog measurement
 skills/glb-exploded-view/SKILL.md      agent skill: recipe → preview → look → fix → render
 ```
+
+## Frame size is part of the recipe
+
+The composition pins its canvas size through the `width`/`height` variables;
+the capture tool passes the same values and warns when the viewport and the
+canvas disagree. A mismatch does not fail — it silently crops the frame to the
+top-left corner of a bigger canvas, which is why the tool now checks the
+canvas size of the loaded page before the first frame.
+
+## Determinism, measured
+
+| Check | Result |
+| --- | --- |
+| Two runs of the same recipe, same machine | 180/180 frames byte-identical (`tools/verify.mjs --a out/det1 --b out/det2`) |
+| Same recipe, different GPU backend (VPS SwiftShader vs MBP Apple/Metal) | bytes differ; SSIM 0.984, 0.79 % of pixels differ by > 8/255 (antialiasing on edges) |
+
+So: byte-identity is a **per-backend** invariant. Golden frames are pinned to
+a machine + GPU combination; across backends the invariant is perceptual
+equality, not equality of bytes.

@@ -40,6 +40,32 @@ function runCapture(outDir, extra) {
   return r.stdout.trim();
 }
 
+/* Compare two existing captures: the acceptance criterion is that every frame
+   of both runs has the same sha256. */
+const dirA = arg("a");
+const dirB = arg("b");
+if (dirA && dirB) {
+  const ma = JSON.parse(fs.readFileSync(path.join(dirA, "manifest.json"), "utf8"));
+  const mb = JSON.parse(fs.readFileSync(path.join(dirB, "manifest.json"), "utf8"));
+  if (ma.frames.length !== mb.frames.length) {
+    console.error(`MISMATCH: ${ma.frames.length} vs ${mb.frames.length} frames`);
+    process.exit(1);
+  }
+  let bad = 0;
+  for (let i = 0; i < ma.frames.length; i++) {
+    if (ma.frames[i].sha256 !== mb.frames[i].sha256) {
+      if (bad < 5) console.error(`MISMATCH frame ${i}: ${ma.frames[i].sha256} != ${mb.frames[i].sha256}`);
+      bad++;
+    }
+  }
+  console.log(
+    bad === 0
+      ? `verify: ${ma.frames.length} frames, both runs byte-identical`
+      : `verify: ${bad}/${ma.frames.length} frames differ`
+  );
+  process.exit(bad === 0 ? 0 : 1);
+}
+
 const dir = arg("dir");
 if (dir) {
   // Verify an existing capture against the digests stored in its manifest.
