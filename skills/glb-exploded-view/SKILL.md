@@ -60,3 +60,19 @@ license: Apache-2.0
 ≥2 именованными mesh-нодами, средний размер, доля meshopt. Мебельные каталоги
 (scanned-objects, abo) дают **1 mesh на файл** → разлёт по ним невозможен,
 используй `cutaway`.
+
+## Sources of assets
+
+- GLB catalogs on Hugging Face: https://huggingface.co/datasets?sort=likes&search=glb
+- The asset this pipeline was built against (CT anatomy, ~115 named parts per
+  body): https://huggingface.co/datasets/codepawl/ct-anatomy-glb
+  (TotalSegmentator v2.0.1, Zenodo 10047292, University Hospital Basel, CC BY 4.0)
+
+Measured with `tools/glb-inventory.mjs`: the furniture catalogs
+(`codepawl/scanned-objects-glb`, 1033 files, `codepawl/abo-glb`, 7953 files)
+contain **one merged mesh per file** — no semantic parts. Parts exist only in
+the CT dataset (27 files). For objects without parts the path is the cutaway
+(a clipping plane), not the explode.
+
+The full guide with our measurements: `data/wiki/concepts/glb-agent-animation-guide.md`
+in the `summaryProjects` repository.
