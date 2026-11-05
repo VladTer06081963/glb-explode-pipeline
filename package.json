@@ -1,0 +1,16 @@
+{
+  "name": "glb-explode-pipeline",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic GLB exploded-view / cutaway pipeline on top of HyperFrames",
+  "scripts": {
+    "preview": "node tools/capture.mjs --recipe recipes/ct-anatomy.json --at 0,1.5,3 --out out/preview --contact-sheet",
+    "render": "node tools/capture.mjs --recipe recipes/ct-anatomy.json --out out/anatomy --contact-sheet --ffmpeg ffmpeg",
+    "verify": "node tools/verify.mjs --recipe recipes/ct-anatomy.json --at 0,1,2,3",
+    "inventory": "node tools/glb-inventory.mjs --repo codepawl/ct-anatomy-glb --sample 10"
+  },
+  "dependencies": {
+    "puppeteer-core": "^23.11.1"
+  }
+}

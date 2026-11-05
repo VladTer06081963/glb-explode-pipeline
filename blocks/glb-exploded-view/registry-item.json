@@ -1,0 +1,20 @@
+{
+  "$schema": "https://hyperframes.heygen.com/schema/registry-item.json",
+  "name": "glb-exploded-view",
+  "type": "hyperframes:block",
+  "title": "GLB Exploded View",
+  "description": "Load a GLB or glTF model, take its named mesh nodes as parts, and explode or reassemble them as a pure function of time. Supports meshopt-compressed models, a cutaway plane and labels pinned to live world positions.",
+  "tags": ["3d-object", "three-js", "webgl", "glb", "exploded-view", "cutaway", "labels", "product", "anatomy"],
+  "dimensions": {
+    "width": 1920,
+    "height": 1080
+  },
+  "duration": 6,
+  "files": [
+    {
+      "path": "glb-exploded-view.html",
+      "target": "compositions/glb-exploded-view.html",
+      "type": "hyperframes:composition"
+    }
+  ]
+}

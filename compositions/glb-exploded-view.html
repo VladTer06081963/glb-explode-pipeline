@@ -1,0 +1,503 @@
+<!doctype html>
+<!--
+  GLB Exploded View: load a GLB/glTF model, take its named mesh nodes as parts,
+  and explode / reassemble them as a pure function of time. Optional cutaway plane
+  and HTML labels pinned to live world positions.
+
+  Seek-safe: every frame is render(t), driven by one linear GSAP clock.
+  Meshopt-compressed models (EXT_meshopt_compression) are supported.
+-->
+<html
+  lang="en"
+  data-composition-variables='[
+    { "id": "model_url", "type": "string", "role": "content", "label": "Model URL (.glb or .gltf)", "description": "Path or URL of the model. Named mesh nodes become the parts.", "default": "" },
+    { "id": "labels", "type": "string", "role": "content", "label": "Labels (comma separated part names)", "default": "" },
+    { "id": "explode_field", "type": "string", "role": "motion", "label": "Explode field", "description": "radial | hierarchical | symmetric-fan", "default": "radial" },
+    { "id": "explode_amount", "type": "number", "role": "motion", "label": "Explode amount", "default": 1.1, "min": 0, "max": 3, "step": 0.05 },
+    { "id": "explode_start", "type": "number", "role": "motion", "label": "Explode start (s)", "default": 0.5, "min": 0, "step": 0.1 },
+    { "id": "explode_duration", "type": "number", "role": "motion", "label": "Explode duration (s)", "default": 1.5, "min": 0.1, "step": 0.1 },
+    { "id": "camera_orbit", "type": "number", "role": "motion", "label": "Camera orbit (degrees)", "default": 0, "min": -180, "max": 180, "step": 5 },
+    { "id": "camera_fov", "type": "number", "role": "camera", "label": "Camera FOV", "default": 38, "min": 12, "max": 90, "step": 1 },
+    { "id": "camera_zoom", "type": "string", "role": "camera", "label": "Camera zoom mode", "description": "auto — pull back with the explosion; exploded — always frame the exploded pose; assembled — always frame the assembled pose", "default": "auto" },
+    { "id": "camera_margin", "type": "number", "role": "camera", "label": "Camera margin", "description": "Fraction of the frame left around the subject", "default": 1.12, "min": 1.0, "max": 2.0, "step": 0.02 },
+    { "id": "cutaway", "type": "string", "role": "content", "label": "Cutaway axis", "description": "none | x | z — the plane cuts the model open", "default": "none" },
+    { "id": "cutaway_position", "type": "number", "role": "content", "label": "Cutaway position (-1..1 of the model)", "default": 0, "min": -1, "max": 1, "step": 0.05 },
+    { "id": "background", "type": "color", "role": "style", "label": "Background", "default": "#05070d" }
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>GLB Exploded View</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #05070d;
+      }
+      #gev-root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+      }
+      #gev-root canvas {
+        display: block;
+      }
+      .gev-label {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        padding: 6px 12px;
+        border-radius: 8px;
+        background: rgba(5, 7, 13, 0.82);
+        border: 1px solid rgba(232, 236, 245, 0.28);
+        color: #e8ecf5;
+        font: 500 28px/1.2 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="gev-root"
+      data-composition-id="glb-exploded-view"
+      data-start="0"
+      data-duration="6"
+      data-width="1920"
+      data-height="1080"
+    ></div>
+
+    <script>
+      (function () {
+        var defaults = {
+          model_url: "",
+          labels: "",
+          explode_field: "radial",
+          explode_amount: 1.1,
+          explode_start: 0.5,
+          explode_duration: 1.5,
+          camera_orbit: 0,
+          camera_fov: 38,
+          camera_zoom: "auto",
+          camera_margin: 1.12,
+          cutaway: "none",
+          cutaway_position: 0,
+          background: "#05070d"
+        };
+        var scoped = {};
+        try {
+          var q = new URLSearchParams(window.location.search);
+          q.forEach(function (value, key) {
+            scoped[key] = value;
+          });
+        } catch (e) {
+          /* no query params */
+        }
+        var vars = Object.assign(
+          {},
+          defaults,
+          (window.__hyperframes && window.__hyperframes.getVariables && window.__hyperframes.getVariables()) || {},
+          window.__hfVariables || {},
+          scoped
+        );
+        var root = document.getElementById("gev-root");
+        var duration = Math.max(0.001, parseFloat(root.dataset.duration) || 6);
+
+        var clock = { t: 0 };
+        var scene = { vars: vars, clock: clock, render: null, duration: duration };
+        window.__glbExplodedView = scene;
+        window.__hf = window.__hf || {};
+        window.__hf.buildReady = window.__hf.buildReady || {};
+        window.__hf.buildReady["glb-exploded-view"] = new Promise(function (resolve) {
+          scene.ready = resolve;
+        });
+
+        var tl = gsap.timeline({ paused: true });
+        tl.to(clock, {
+          t: duration,
+          duration: duration,
+          ease: "none",
+          onUpdate: function () {
+            if (scene.render) scene.render(clock.t);
+          },
+        });
+        window.__timelines = window.__timelines || {};
+        window.__timelines["glb-exploded-view"] = tl;
+      })();
+    </script>
+
+    <script type="module">
+      import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.184.0/+esm";
+      import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/loaders/GLTFLoader.js/+esm";
+      import { MeshoptDecoder } from "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/meshopt_decoder.module.js/+esm";
+
+      const host = window.__glbExplodedView;
+      const V = host.vars;
+      const root = document.getElementById("gev-root");
+      const W = 1920;
+      const H = 1080;
+
+      const canvas = document.createElement("canvas");
+      root.appendChild(canvas);
+      const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: false });
+      renderer.setPixelRatio(1);
+      renderer.setSize(W, H, false);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.localClippingEnabled = true;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(V.background || "#05070d");
+      const camera = new THREE.PerspectiveCamera(38, W / H, 0.01, 2000);
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x1b2333, 1.8));
+      const key = new THREE.DirectionalLight(0xffffff, 2.4);
+      key.position.set(-2, 4, 3);
+      scene.add(key);
+      const fill = new THREE.DirectionalLight(0xffffff, 0.9);
+      fill.position.set(3, 1, -2);
+      scene.add(fill);
+
+      const loader = new GLTFLoader();
+      loader.setMeshoptDecoder(MeshoptDecoder);
+
+      /* ---------- parts = named mesh nodes ---------- */
+      const parts = [];
+      let modelRoot = null;
+
+      function collectParts(node, parent) {
+        node.updateMatrixWorld(true);
+        node.traverse((child) => {
+          if (child.isMesh && child.name) {
+            const box = new THREE.Box3().setFromObject(child);
+            const center = box.getCenter(new THREE.Vector3());
+            modelRoot.worldToLocal(center);
+            parts.push({
+              node: child,
+              name: child.name,
+              parent: parent && parent.name ? parent.name : "",
+              center: center,
+              base: child.position.clone(),
+              size: box.getSize(new THREE.Vector3()).length(),
+            });
+          }
+        });
+      }
+
+      /* Asset URLs are resolved against the project root, not against the
+         document: the composition may live in compositions/ while assets live
+         in assets/. Absolute and remote URLs are used as-is. */
+      const modelUrl = V.model_url
+        ? /^(https?:|data:|blob:)/.test(String(V.model_url))
+          ? String(V.model_url)
+          : "/" + String(V.model_url).replace(/^\/+/, "")
+        : "";
+
+      if (modelUrl) {
+        const gltf = await loader.loadAsync(modelUrl);
+        modelRoot = gltf.scene;
+        scene.add(modelRoot);
+        collectParts(modelRoot, null);
+      } else {
+        // Built-in fallback: a simple three-part object so the block is testable
+        // without an asset.
+        modelRoot = new THREE.Group();
+        const mat = new THREE.MeshStandardMaterial({ color: 0xc9d3e3, roughness: 0.55, metalness: 0.1 });
+        ["base", "body", "lid"].forEach((name, i) => {
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(1 - i * 0.2, 0.35, 1 - i * 0.2), mat);
+          mesh.name = name;
+          mesh.position.y = i * 0.42;
+          modelRoot.add(mesh);
+        });
+        scene.add(modelRoot);
+        collectParts(modelRoot, null);
+      }
+
+      /* ---------- explode field ---------- */
+      function easeInOutCubic(x) {
+        return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+      }
+
+      const centroid = new THREE.Vector3();
+      parts.forEach((p) => centroid.add(p.center));
+      centroid.multiplyScalar(1 / Math.max(1, parts.length));
+      const maxRadius = Math.max(
+        0.0001,
+        ...parts.map((p) => p.center.distanceTo(centroid))
+      );
+      const maxSize = Math.max(0.0001, ...parts.map((p) => p.size));
+
+      function directionsFor(field) {
+        const dirs = new Map();
+        if (field === "symmetric-fan") {
+          // Group parts of similar size, fan each group around its own axis.
+          const groups = new Map();
+          parts.forEach((p) => {
+            const key = Math.round(p.size / (maxSize * 0.03));
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(p);
+          });
+          groups.forEach((group) => {
+            const axis = new THREE.Vector3(0, 1, 0);
+            group.forEach((p, i) => {
+              const angle = (i * 137.508 * Math.PI) / 180;
+              const dir = new THREE.Vector3(
+                Math.cos(angle) + 0.3 * axis.x,
+                Math.sin(angle) * 0.6 + 0.3 * axis.y,
+                Math.sin(angle) * 0.4 + 0.3 * axis.z
+              ).normalize();
+              dirs.set(p.name, dir);
+            });
+          });
+          return dirs;
+        }
+        if (field === "hierarchical") {
+          // Parts leave along the axis of their nearest ancestor part.
+          const byName = new Map(parts.map((p) => [p.name, p]));
+          parts.forEach((p) => {
+            let anchor = null;
+            let cur = p.parent;
+            while (cur && !anchor) {
+              anchor = byName.get(cur) || null;
+              cur = anchor ? anchor.parent : null;
+            }
+            const base = anchor ? anchor.center : centroid;
+            const dir = p.center.clone().sub(base);
+            if (dir.lengthSq() < 1e-9) dir.copy(p.center).sub(centroid);
+            if (dir.lengthSq() < 1e-9) dir.set(0, 1, 0);
+            dirs.set(p.name, dir.normalize());
+          });
+          return dirs;
+        }
+        // radial (default)
+        parts.forEach((p) => {
+          const dir = p.center.clone().sub(centroid);
+          if (dir.lengthSq() < 1e-9) dir.set(0, 1, 0);
+          dirs.set(p.name, dir.normalize());
+        });
+        return dirs;
+      }
+
+      const field = (V.explode_field || "radial").toLowerCase();
+      const dirs = directionsFor(field);
+      const amount = Number(V.explode_amount);
+      const explodeStart = Number(V.explode_start);
+      const explodeDuration = Math.max(0.0001, Number(V.explode_duration));
+
+      // Per-part distance and delay, computed once (pure, time independent).
+      const plan = parts.map((p) => {
+        const dir = dirs.get(p.name) || new THREE.Vector3(0, 1, 0);
+        const dist = amount * Math.max(p.center.distanceTo(centroid), 0.15 * maxRadius);
+        const delay = 0.25 * (p.center.distanceTo(centroid) / maxRadius);
+        return { part: p, dir: dir, dist: dist, delay: delay };
+      });
+
+      function applyExplode(t) {
+        const raw = Math.min(1, Math.max(0, (t - explodeStart) / explodeDuration));
+        plan.forEach((item) => {
+          const window = Math.max(1e-6, 1 - item.delay);
+          const k = easeInOutCubic(Math.min(1, Math.max(0, (raw - item.delay) / window)));
+          item.part.node.position.copy(item.part.base).addScaledVector(item.dir, item.dist * k);
+        });
+      }
+
+      /* ---------- cutaway ---------- */
+      const clipPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);
+      let cutEnabled = false;
+      function applyCutaway() {
+        const axis = (V.cutaway || "none").toLowerCase();
+        cutEnabled = axis === "x" || axis === "z";
+        if (!cutEnabled) return;
+        const box = new THREE.Box3().setFromObject(modelRoot);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const pos = Number(V.cutaway_position) || 0;
+        if (axis === "x") {
+          clipPlane.normal.set(-1, 0, 0);
+          clipPlane.constant = center.x + pos * (size.x / 2);
+        } else {
+          clipPlane.normal.set(0, 0, -1);
+          clipPlane.constant = center.z + pos * (size.z / 2);
+        }
+        modelRoot.traverse((child) => {
+          if (child.isMesh) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach((m) => {
+              m.clippingPlanes = [clipPlane];
+              m.clipShadows = true;
+              m.side = THREE.DoubleSide;
+            });
+          }
+        });
+      }
+      applyCutaway();
+
+      /* ---------- camera ----------
+         The camera is a pure function of time as well: it frames the assembled
+         pose at t=0 and pulls back to frame the fully exploded pose, so the
+         subject never leaves the frame and never looks tiny.
+         `camera_zoom`: auto (follow the explosion) | exploded (always frame the
+         exploded pose) | assembled (always frame the assembled pose). */
+      const ZOOM_MODE = (V.camera_zoom || "auto").toLowerCase();
+      const MARGIN = Number(V.camera_margin) || 1.12;
+      let fitInfo = null;
+
+      function measurePose(explodeT) {
+        applyExplode(explodeT);
+        const box = new THREE.Box3().setFromObject(modelRoot);
+        const sphere = box.getBoundingSphere(new THREE.Sphere());
+        return { center: sphere.center.clone(), radius: sphere.radius };
+      }
+
+      const poseAssembled = measurePose(0);
+      const poseExploded = measurePose(explodeStart + explodeDuration);
+      const poseFixed =
+        ZOOM_MODE === "assembled" ? poseAssembled : ZOOM_MODE === "exploded" ? poseExploded : null;
+
+      function updateCamera(t) {
+        const raw = Math.min(1, Math.max(0, (t - explodeStart) / explodeDuration));
+        const k = easeInOutCubic(raw);
+        const center = poseFixed
+          ? poseFixed.center
+          : poseAssembled.center.clone().lerp(poseExploded.center, k);
+        const radius = poseFixed
+          ? poseFixed.radius
+          : poseAssembled.radius + (poseExploded.radius - poseAssembled.radius) * k;
+        camera.fov = Number(V.camera_fov) || 38;
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        const fov = (camera.fov * Math.PI) / 180;
+        const distance = (radius * MARGIN) / Math.sin(fov / 2);
+        const orbit = ((Number(V.camera_orbit) || 0) * Math.PI) / 180;
+        const dir = new THREE.Vector3(
+          Math.sin(orbit) * 0.62 + 0.55,
+          0.35,
+          Math.cos(orbit) * 0.75
+        ).normalize();
+        camera.position.copy(center).addScaledVector(dir, distance);
+        camera.lookAt(center);
+        camera.updateMatrixWorld();
+        fitInfo = {
+          center: center.toArray(),
+          radius: radius,
+          distance: distance,
+          fov: camera.fov,
+          aspect: camera.aspect,
+          zoomMode: ZOOM_MODE,
+        };
+      }
+      applyExplode(0);
+      updateCamera(0);
+
+      /* ---------- labels ---------- */
+      const labelEls = [];
+      const wanted = (V.labels || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      wanted.forEach((name) => {
+        const part = parts.find((p) => p.name === name);
+        if (!part) return;
+        const el = document.createElement("div");
+        el.className = "gev-label";
+        el.setAttribute("data-layout-allow-overlap", "");
+        el.textContent = name.replace(/_/g, " ");
+        root.appendChild(el);
+        labelEls.push({ el: el, part: part });
+      });
+
+      const v = new THREE.Vector3();
+      // Labels must not cover each other: resolve collisions deterministically
+      // by pushing a label down (or up) until its box is free.
+      function placeLabels() {
+        const placed = [];
+        const measured = labelEls.map((item) => {
+          item.part.node.getWorldPosition(v);
+          v.project(camera);
+          return {
+            item: item,
+            x: ((v.x + 1) / 2) * W,
+            y: ((1 - v.y) / 2) * H,
+            w: item.el.offsetWidth || 140,
+            h: item.el.offsetHeight || 46,
+          };
+        });
+        measured.sort((a, b) => a.y - b.y || a.x - b.x);
+        const overlaps = (box) =>
+          placed.some(
+            (p) =>
+              Math.abs(p.cx - box.cx) < (p.w + box.w) / 2 + 10 &&
+              Math.abs(p.cy - box.cy) < (p.h + box.h) / 2 + 10
+          );
+        measured.forEach((m) => {
+          let top = m.y - m.h / 2;
+          let guard = 0;
+          while (overlaps({ cx: m.x, cy: top + m.h / 2, w: m.w, h: m.h }) && guard < 64) {
+            top += m.h + 10;
+            guard += 1;
+          }
+          if (top + m.h > H - 8) {
+            top = Math.max(8, m.y - m.h / 2);
+            guard = 0;
+            while (overlaps({ cx: m.x, cy: top + m.h / 2, w: m.w, h: m.h }) && guard < 64) {
+              top -= m.h + 10;
+              guard += 1;
+            }
+          }
+          placed.push({ cx: m.x, cy: top + m.h / 2, w: m.w, h: m.h });
+          m.item.el.style.left = `${m.x}px`;
+          m.item.el.style.top = `${top + m.h / 2}px`;
+        });
+      }
+
+      host.render = function (t) {
+        applyExplode(t);
+        updateCamera(t);
+        renderer.render(scene, camera);
+        placeLabels();
+      };
+      /* HyperFrames contract: the host dispatches `hf-seek` with the target
+         time and renders the composition itself. We must draw from that time
+         instead of relying on the GSAP ticker, which is throttled or frozen
+         in headless capture and therefore produces identical frames. */
+      window.addEventListener("hf-seek", function (event) {
+        var detail = (event && event.detail) || {};
+        var time = typeof detail.time === "number" ? detail.time : 0;
+        if (host.render) host.render(time);
+        if (typeof detail.waitUntil === "function") {
+          detail.waitUntil(Promise.resolve());
+        }
+      });
+      /* Debug/inspection handle: lets tools read the collected parts, the
+         computed explode plan and the live scene without reaching into
+         three.js internals. */
+      host.debug = {
+        THREE: THREE,
+        fit: fitInfo,
+        parts: parts,
+        plan: plan,
+        scene: scene,
+        camera: camera,
+        renderer: renderer,
+        applyExplode: applyExplode,
+        partPositions: function () {
+          const out = {};
+          parts.forEach(function (p) {
+            const v = new THREE.Vector3();
+            p.node.getWorldPosition(v);
+            out[p.name] = [v.x, v.y, v.z];
+          });
+          return out;
+        }
+      };
+      host.render(0);
+
+      await renderer.compileAsync(scene, camera);
+      host.ready();
+    </script>
+  </body>
+</html>
