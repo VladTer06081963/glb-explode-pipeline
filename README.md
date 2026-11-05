@@ -129,3 +129,25 @@ canvas size of the loaded page before the first frame.
 So: byte-identity is a **per-backend** invariant. Golden frames are pinned to
 a machine + GPU combination; across backends the invariant is perceptual
 equality, not equality of bytes.
+
+## DaVinci Resolve stage (verified 2026-11-06)
+
+The film leaves this pipeline as a single video file, not as a PNG sequence.
+Verified rules against DaVinci Resolve 18.6.6 (Mac App Store build, sandbox):
+
+| Rule | Why |
+| --- | --- |
+| Deliver **mp4**, not a PNG sequence | a PNG sequence imports but fails to decode at render time (`... не удалось правильно декодировать`) |
+| Deliver into **`~/Movies`** on the Mac | Resolve's sandbox imports only from its allowed roots; the same file elsewhere returns `{"imported": 0}` with no error |
+| Source must be in the **project frame rate** (24 by default) | the project frame rate cannot be changed through the API (`SetSetting` → False, readback 24.0) |
+| Set the **project resolution** before creating the timeline | the render output takes the project resolution; `FormatWidth/FormatHeight` are ignored |
+| `safe_set_project_settings` needs **`restore: false`** | the helper restores the original value by default |
+| MCP arguments with arrays must be a **JSON string** | an object argument loses nested arrays (`INVALID_CLIP_IDS`) |
+| `render.start` returning success is a **hint** | the proof is `render.verify_output` |
+
+```bash
+make deliver NAME=ct-anatomy     # render + transcode to 24 fps + copy into ~/Movies
+```
+
+The script prints the exact MCP calls to follow (project settings → timeline →
+import → append → render → verify).

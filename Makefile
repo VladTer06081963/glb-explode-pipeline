@@ -2,8 +2,9 @@ SHELL := /bin/bash
 RECIPE ?= recipes/ct-anatomy.json
 OUT    ?= out/anatomy
 AT     ?= 0,1.5,3
+NAME   ?= ct-anatomy
 
-.PHONY: setup preview render verify inventory assets clean
+.PHONY: setup preview render verify inventory assets deliver clean
 
 setup:            ## install node deps
 	npm install
@@ -23,6 +24,10 @@ inventory:        ## measure a GLB catalog (named parts per file)
 assets:           ## fetch + check assets against assets.manifest.json
 	node tools/fetch-assets.mjs
 	node tools/verify-assets.mjs
+
+deliver:         ## hand the rendered film to the DaVinci Resolve stage (mp4, 24 fps, ~/Movies)
+	node tools/capture.mjs --recipe $(RECIPE) --out $(OUT) --contact-sheet --ffmpeg ffmpeg
+	bash tools/deliver-to-resolve.sh --film $(OUT)/film.mp4 --name $(NAME)
 
 clean:
 	rm -rf out
