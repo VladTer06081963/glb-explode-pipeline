@@ -16,6 +16,7 @@
     { "id": "explode_amount", "type": "number", "role": "motion", "label": "Explode amount", "default": 1.1, "min": 0, "max": 3, "step": 0.05 },
     { "id": "explode_start", "type": "number", "role": "motion", "label": "Explode start (s)", "default": 0.5, "min": 0, "step": 0.1 },
     { "id": "explode_duration", "type": "number", "role": "motion", "label": "Explode duration (s)", "default": 1.5, "min": 0.1, "step": 0.1 },
+    { "id": "explode_return", "type": "number", "role": "motion", "label": "Reassemble duration (s, 0 = stay exploded)", "default": 0, "min": 0, "step": 0.1 },
     { "id": "camera_orbit", "type": "number", "role": "motion", "label": "Camera orbit (degrees)", "default": 0, "min": -180, "max": 180, "step": 5 },
     { "id": "camera_fov", "type": "number", "role": "camera", "label": "Camera FOV", "default": 38, "min": 12, "max": 90, "step": 1 },
     { "id": "camera_zoom", "type": "string", "role": "camera", "label": "Camera zoom mode", "description": "auto — pull back with the explosion; exploded — always frame the exploded pose; assembled — always frame the assembled pose", "default": "auto" },
@@ -83,6 +84,7 @@
           explode_amount: 1.1,
           explode_start: 0.5,
           explode_duration: 1.5,
+          explode_return: 0,
           camera_orbit: 0,
           camera_fov: 38,
           camera_zoom: "auto",
@@ -303,6 +305,20 @@
       const amount = Number(V.explode_amount);
       const explodeStart = Number(V.explode_start);
       const explodeDuration = Math.max(0.0001, Number(V.explode_duration));
+      const returnDuration = Math.max(0, Number(V.explode_return) || 0);
+
+      // The raw progress of the effect: 0 -> 1 while the parts fly apart and,
+      // when a reassemble phase is set, 1 -> 0 while they come back. Pure
+      // function of the time, so the film is reproducible frame by frame.
+      function explodeProgress(t) {
+        if (t <= explodeStart) return 0;
+        if (t < explodeStart + explodeDuration) return (t - explodeStart) / explodeDuration;
+        if (returnDuration > 0) {
+          const rt = (t - explodeStart - explodeDuration) / returnDuration;
+          return rt >= 1 ? 0 : 1 - rt;
+        }
+        return 1;
+      }
 
       // Per-part distance and delay, computed once (pure, time independent).
       const plan = parts.map((p) => {
@@ -313,7 +329,7 @@
       });
 
       function applyExplode(t) {
-        const raw = Math.min(1, Math.max(0, (t - explodeStart) / explodeDuration));
+        const raw = Math.min(1, Math.max(0, explodeProgress(t)));
         plan.forEach((item) => {
           const window = Math.max(1e-6, 1 - item.delay);
           const k = easeInOutCubic(Math.min(1, Math.max(0, (raw - item.delay) / window)));
@@ -546,6 +562,7 @@
         camera: camera,
         renderer: renderer,
         applyExplode: applyExplode,
+        explodeProgress: explodeProgress,
         partPositions: function () {
           const out = {};
           parts.forEach(function (p) {

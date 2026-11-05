@@ -312,7 +312,43 @@ async function main() {
     variables,
     frames: all,
   };
+  // Dead time: a frame that is byte-identical to the previous one. A recipe
+  // whose animation ends before the declared duration produces a long run of
+  // them — the render is paid for, but nothing moves.
+  const staticRuns = [];
+  let runStart = 0;
+  for (let i = 1; i <= all.length; i++) {
+    // Only consecutive frame numbers count: in a sparse capture (--at) two
+    // neighbouring entries can be seconds apart, and an unchanged picture
+    // there is not dead time.
+    const consecutive = i < all.length && all[i].index === all[i - 1].index + 1;
+    const same = consecutive && all[i].sha256 === all[i - 1].sha256;
+    if (same) continue;
+    if (i - 1 > runStart) {
+      staticRuns.push({
+        fromIndex: all[runStart].index,
+        toIndex: all[i - 1].index,
+        fromSec: Number((all[runStart].index / fps).toFixed(3)),
+        toSec: Number((all[i - 1].index / fps).toFixed(3)),
+        frames: i - runStart,
+      });
+    }
+    runStart = i;
+  }
+  const staticFrames = staticRuns.reduce((n, r) => n + r.frames, 0);
+  manifest.static = {
+    frames: staticFrames,
+    ratio: Number((staticFrames / Math.max(1, all.length)).toFixed(3)),
+    runs: staticRuns.slice(0, 10),
+  };
   fs.writeFileSync(path.join(outDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+  if (staticFrames > 0) {
+    const longest = staticRuns.reduce((a, b) => (b.frames > a.frames ? b : a), staticRuns[0]);
+    console.log(
+      `capture: static frames ${staticFrames}/${all.length} (${(manifest.static.ratio * 100).toFixed(1)}%) — ` +
+        `longest run ${longest.fromSec}s..${longest.toSec}s (${longest.frames} frames)`
+    );
+  }
 
   if (flag("contact-sheet")) await writeContactSheet(puppeteer, framesDir, outDir, all, width, height);
 

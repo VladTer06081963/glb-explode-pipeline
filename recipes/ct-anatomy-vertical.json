@@ -1,20 +1,21 @@
 {
   "name": "ct-anatomy-vertical",
   "composition": "compositions/glb-exploded-view.html",
-  "duration": 6,
+  "duration": 3.2,
   "fps": 30,
-  "description": "TotalSegmentator CT (s1045) — vertical 9:16 frame, 115 named anatomical parts.",
+  "description": "TotalSegmentator CT (s1045) — vertical 9:16, explode and reassemble.",
   "variables": {
     "model_url": "/assets/s1045_lod3.glb",
     "explode_field": "radial",
     "explode_amount": 1.1,
-    "explode_start": 0.5,
+    "explode_start": 0.2,
     "explode_duration": 1.5,
     "camera_orbit": 0,
     "camera_fov": 38,
     "cutaway": "none",
     "background": "#05070d",
-    "labels": "brain,spinal_cord,aorta,liver,stomach,femur_left,femur_right"
+    "labels": "brain,spinal_cord,aorta,liver,stomach,femur_left,femur_right",
+    "explode_return": 1.5
   },
   "width": 1080,
   "height": 1920
