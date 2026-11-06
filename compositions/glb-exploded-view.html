@@ -1132,12 +1132,26 @@
       const TITLE_FADE = Math.max(0.05, Number(V.title_fade) || 0.5);
       const TITLE_Y = Math.min(95, Math.max(5, Number(V.title_y) || 50));
       titleEl.style.top = TITLE_Y + "%";
+      /* The title has to fit the frame: a long title with wide letter spacing
+         overflows a 9:16 frame, and a cut-off title is worse than a small
+         one. The size is fitted to the frame width, deterministically. */
+      function fitTitle() {
+        if (!TITLE_TEXT) return;
+        const base = 76 * (H / 1080);
+        const maxWidth = W * 0.88;
+        titleEl.style.fontSize = base + "px";
+        const width = titleEl.offsetWidth || 1;
+        if (width > maxWidth) titleEl.style.fontSize = base * (maxWidth / width) + "px";
+      }
       function updateTitle(t) {
         if (!TITLE_TEXT) {
           titleEl.style.opacity = "0";
           return;
         }
-        titleEl.textContent = TITLE_TEXT;
+        if (titleEl.textContent !== TITLE_TEXT) {
+          titleEl.textContent = TITLE_TEXT;
+          fitTitle();
+        }
         const up = Math.min(1, Math.max(0, (t - TITLE_START) / TITLE_FADE));
         let down = 1;
         if (TITLE_END > 0) down = Math.min(1, Math.max(0, (TITLE_END - t) / TITLE_FADE));
