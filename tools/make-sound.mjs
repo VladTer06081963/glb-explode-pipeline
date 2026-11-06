@@ -175,6 +175,43 @@ function renderClack(rng, size) {
   return out;
 }
 
+/** Read a 16-bit PCM WAV into two float channels. */
+function readWav(filePath) {
+  const buf = fs.readFileSync(filePath);
+  if (buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") {
+    throw new Error(`not a WAV file: ${filePath}`);
+  }
+  let offset = 12;
+  let fmt = null;
+  let data = null;
+  while (offset + 8 <= buf.length) {
+    const id = buf.toString("ascii", offset, offset + 4);
+    const size = buf.readUInt32LE(offset + 4);
+    if (id === "fmt ") {
+      fmt = {
+        channels: buf.readUInt16LE(offset + 10),
+        sampleRate: buf.readUInt32LE(offset + 12),
+        bits: buf.readUInt16LE(offset + 22),
+      };
+    } else if (id === "data") {
+      data = buf.subarray(offset + 8, offset + 8 + size);
+    }
+    offset += 8 + size + (size % 2);
+  }
+  if (!fmt || !data) throw new Error(`malformed WAV: ${filePath}`);
+  if (fmt.bits !== 16) throw new Error(`only 16-bit WAV is supported: ${filePath}`);
+  const frames = Math.floor(data.length / 2 / fmt.channels);
+  const left = new Float32Array(frames);
+  const right = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    const l = data.readInt16LE(i * fmt.channels * 2) / 32768;
+    const r = fmt.channels > 1 ? data.readInt16LE(i * fmt.channels * 2 + 2) / 32768 : l;
+    left[i] = l;
+    right[i] = r;
+  }
+  return { left, right, sampleRate: fmt.sampleRate, frames };
+}
+
 function writeWav(filePath, left, right, sampleRate = SR) {
   const frames = left.length;
   const data = Buffer.alloc(frames * 4);
@@ -215,9 +252,13 @@ const assetPath = path.resolve(ROOT, modelUrl.replace(/^\/+/, ""));
 const gltf = parseGltfJson(fs.readFileSync(assetPath));
 
 const assembleStart = Number(vars.assemble_start ?? 0.8);
-const step = Number(vars.sequence_step ?? 0.045);
+const bpm = Number(vars.music_bpm ?? 120);
+const secondsPerBeat = 60 / bpm;
+const stepInBeats = Number(vars.assembly_step_beats ?? 0);
+const step = stepInBeats > 0 ? secondsPerBeat * stepInBeats : Number(vars.sequence_step ?? 0.045);
 const flight = Number(vars.sequence_duration ?? 0.3);
 const duration = Number(recipe.duration ?? 4.2);
+const musicPath = arg("music", null);
 
 let parts = [];
 for (const system of systems) {
@@ -250,6 +291,29 @@ parts.forEach((part, index) => {
   hits.push({ name: part.name, at: Number(landAt.toFixed(4)), size: Number(part.size.toFixed(4)) });
 });
 
+/* The music: the same track the scene dances to. The bones duck it for a
+   moment when they land, the way a real clatter sits on top of a track. */
+if (musicPath) {
+  const music = readWav(path.resolve(ROOT, musicPath));
+  const musicFrames = Math.min(frames, music.frames);
+  for (let i = 0; i < musicFrames; i++) {
+    left[i] += music.left[i];
+    right[i] += music.right[i];
+  }
+  // ducking: the music steps back for ~120 ms around every hit
+  hits.forEach((hit) => {
+    const centre = Math.round(hit.at * SR);
+    const from = Math.max(0, centre - Math.round(0.01 * SR));
+    const to = Math.min(musicFrames, centre + Math.round(0.14 * SR));
+    for (let i = from; i < to; i++) {
+      const dt = (i - centre) / SR;
+      const duck = 1 - 0.42 * Math.exp(-Math.abs(dt) / 0.05);
+      left[i] *= duck;
+      right[i] *= duck;
+    }
+  });
+}
+
 // Room tone: a very quiet bed of filtered noise so the silence is not digital.
 {
   const bed = svf(420, 0.9);
@@ -258,7 +322,7 @@ parts.forEach((part, index) => {
     const n = rng() * 2 - 1;
     const t = i / SR;
     const swell = 0.35 + 0.65 * Math.min(1, t / Math.max(0.001, assembleStart));
-    const v = bed(n).low * 0.05 * swell + air(n).band * 0.008;
+    const v = (bed(n).low * 0.05 * swell + air(n).band * 0.008) * (musicPath ? 0.25 : 1);
     left[i] += v;
     right[i] += v * 0.92;
   }
@@ -271,7 +335,9 @@ for (let i = 0; i < frames; i++) {
   right[i] = Math.tanh(right[i] * 1.1);
   peak = Math.max(peak, Math.abs(left[i]), Math.abs(right[i]));
 }
-const target = 0.84;
+// With music underneath, the mix is kept lower: the track is already at
+// broadcast level and the clatter only has to sit on top of it.
+const target = musicPath ? 0.52 : 0.84;
 const norm = peak > 0 ? target / peak : 1;
 for (let i = 0; i < frames; i++) {
   left[i] *= norm;

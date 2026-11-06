@@ -130,6 +130,35 @@ So: byte-identity is a **per-backend** invariant. Golden frames are pinned to
 a machine + GPU combination; across backends the invariant is perceptual
 equality, not equality of bytes.
 
+## Music and dance
+
+The music is synthesised, not sampled: `tools/make-music.mjs` builds a track
+from the same clock the scene dances to. Kick, snare, hats, bass and a pad on
+a four-bar progression, with an arrangement that builds bar by bar.
+
+```
+make music RECIPE=recipes/skeleton-dance.json NAME=skeleton-dance BPM=120 BARS=8
+make film  RECIPE=recipes/skeleton-dance.json OUT=out/skeleton-dance NAME=skeleton-dance
+```
+
+The beat grid is the contract between the three parts of the film:
+
+- `music_bpm` in the recipe is the tempo; the grid is written to
+  `assets/<name>-music.map.json` (beat times, sections, progression);
+- the assembly can be staggered **in beats** (`assembly_step_beats`), so every
+  bone lands on a sixteenth note of the music instead of on an arbitrary
+  millisecond;
+- the dance (`dance_amount`, `dance_start`, `dance_end`) reads the same grid,
+  so the hips dip on the beat, the legs step, the arms swing opposite and the
+  head nods on the eighth notes.
+
+The rig is derived from the anatomy of the asset rather than from hard-coded
+numbers: the joints are found on the real geometry (the end of a bone closest
+to the joint it belongs to), so the same code dances with any
+skeleton-shaped asset. The camera keeps a steady frame: its fit is measured
+on the assembly pose, without the dance, so it does not breathe with every
+bounce.
+
 ## The sound of the assembly
 
 `tools/make-sound.mjs` synthesises the clatter of the bones landing - no sample

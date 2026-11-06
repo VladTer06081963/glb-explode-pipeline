@@ -1,0 +1,185 @@
+{
+  "bpm": 120,
+  "beats_per_bar": 4,
+  "seconds_per_beat": 0.5,
+  "bars": 8,
+  "duration": 16,
+  "beat_times": [
+    0,
+    0.5,
+    1,
+    1.5,
+    2,
+    2.5,
+    3,
+    3.5,
+    4,
+    4.5,
+    5,
+    5.5,
+    6,
+    6.5,
+    7,
+    7.5,
+    8,
+    8.5,
+    9,
+    9.5,
+    10,
+    10.5,
+    11,
+    11.5,
+    12,
+    12.5,
+    13,
+    13.5,
+    14,
+    14.5,
+    15,
+    15.5
+  ],
+  "sections": [
+    {
+      "bar": 0,
+      "start": 0,
+      "level": {
+        "hats": 1,
+        "pad": 0.35,
+        "kick": 0,
+        "snare": 0,
+        "bass": 0,
+        "pluck": 0,
+        "cutoff": 700
+      }
+    },
+    {
+      "bar": 1,
+      "start": 2,
+      "level": {
+        "hats": 1,
+        "pad": 0.5,
+        "kick": 0,
+        "snare": 0,
+        "bass": 0,
+        "pluck": 0,
+        "cutoff": 1100
+      }
+    },
+    {
+      "bar": 2,
+      "start": 4,
+      "level": {
+        "hats": 1,
+        "pad": 0.6,
+        "kick": 0.75,
+        "snare": 0,
+        "bass": 0.6,
+        "pluck": 0,
+        "cutoff": 1400
+      }
+    },
+    {
+      "bar": 3,
+      "start": 6,
+      "level": {
+        "hats": 1,
+        "pad": 0.55,
+        "kick": 1,
+        "snare": 0.8,
+        "bass": 0.9,
+        "pluck": 0,
+        "cutoff": 1600
+      }
+    },
+    {
+      "bar": 4,
+      "start": 8,
+      "level": {
+        "hats": 1,
+        "pad": 0.55,
+        "kick": 1,
+        "snare": 0.8,
+        "bass": 0.9,
+        "pluck": 0,
+        "cutoff": 1600
+      }
+    },
+    {
+      "bar": 5,
+      "start": 10,
+      "level": {
+        "hats": 1,
+        "pad": 0.8,
+        "kick": 1,
+        "snare": 0.9,
+        "bass": 1,
+        "pluck": 0.7,
+        "cutoff": 2600
+      }
+    },
+    {
+      "bar": 6,
+      "start": 12,
+      "level": {
+        "hats": 1,
+        "pad": 0.8,
+        "kick": 1,
+        "snare": 0.9,
+        "bass": 1,
+        "pluck": 0.7,
+        "cutoff": 2600
+      }
+    },
+    {
+      "bar": 7,
+      "start": 14,
+      "level": {
+        "hats": 1,
+        "pad": 0.8,
+        "kick": 1,
+        "snare": 0.9,
+        "bass": 1,
+        "pluck": 0.7,
+        "cutoff": 2600
+      }
+    }
+  ],
+  "progression": [
+    {
+      "bar": 0,
+      "root": 65.406,
+      "tones": [
+        261.626,
+        349.228,
+        440
+      ]
+    },
+    {
+      "bar": 1,
+      "root": 103.826,
+      "tones": [
+        207.652,
+        261.626,
+        349.228
+      ]
+    },
+    {
+      "bar": 2,
+      "root": 174.614,
+      "tones": [
+        349.228,
+        440,
+        493.883
+      ]
+    },
+    {
+      "bar": 3,
+      "root": 123.471,
+      "tones": [
+        233.082,
+        293.665,
+        391.995
+      ]
+    }
+  ]
+}
