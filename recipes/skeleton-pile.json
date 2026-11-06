@@ -1,9 +1,9 @@
 {
-  "name": "skeleton-pile-vertical",
+  "name": "skeleton-pile",
   "composition": "compositions/glb-exploded-view.html",
   "duration": 4.2,
   "fps": 30,
-  "description": "Bones only (system=skeleton): a heap of bones on the floor with the skull on top, then the skeleton assembles bone by bone into a standing figure. 9:16.",
+  "description": "Bones only (system=skeleton): a heap of bones on the floor with the skull on top, then the skeleton assembles bone by bone into a standing figure. 16:9.",
   "variables": {
     "model_url": "/assets/s1045_lod3.glb",
     "systems": "skeleton",
@@ -25,6 +25,6 @@
     "background": "#05070d",
     "labels": ""
   },
-  "width": 1080,
-  "height": 1920
+  "width": 1920,
+  "height": 1080
 }

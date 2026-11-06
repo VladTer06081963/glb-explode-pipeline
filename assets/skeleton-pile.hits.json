@@ -1,0 +1,330 @@
+{
+  "recipe": "recipes/skeleton-pile.json",
+  "asset": "assets/s1045_lod3.glb",
+  "systems": [
+    "skeleton"
+  ],
+  "bones": 63,
+  "hits": 63,
+  "assemble_start": 0.8,
+  "sequence_step": 0.045,
+  "sequence_duration": 0.3,
+  "duration": 4.2,
+  "events": [
+    {
+      "name": "femur_right",
+      "at": 1.1,
+      "size": 95205.7793
+    },
+    {
+      "name": "femur_left",
+      "at": 1.145,
+      "size": 93893.8691
+    },
+    {
+      "name": "hip_right",
+      "at": 1.19,
+      "size": 89793.2775
+    },
+    {
+      "name": "sacrum",
+      "at": 1.235,
+      "size": 89962.396
+    },
+    {
+      "name": "hip_left",
+      "at": 1.28,
+      "size": 89246.9676
+    },
+    {
+      "name": "vertebrae_S1",
+      "at": 1.325,
+      "size": 102495.5789
+    },
+    {
+      "name": "vertebrae_L5",
+      "at": 1.37,
+      "size": 95972.0242
+    },
+    {
+      "name": "vertebrae_L4",
+      "at": 1.415,
+      "size": 88471.58
+    },
+    {
+      "name": "vertebrae_L3",
+      "at": 1.46,
+      "size": 95250.1335
+    },
+    {
+      "name": "vertebrae_L2",
+      "at": 1.505,
+      "size": 95332.5027
+    },
+    {
+      "name": "vertebrae_L1",
+      "at": 1.55,
+      "size": 100763.2512
+    },
+    {
+      "name": "rib_right_11",
+      "at": 1.595,
+      "size": 89503.1939
+    },
+    {
+      "name": "rib_right_12",
+      "at": 1.64,
+      "size": 72558.7004
+    },
+    {
+      "name": "vertebrae_T12",
+      "at": 1.685,
+      "size": 83658.887
+    },
+    {
+      "name": "rib_left_11",
+      "at": 1.73,
+      "size": 86919.7721
+    },
+    {
+      "name": "rib_left_12",
+      "at": 1.775,
+      "size": 94183.0256
+    },
+    {
+      "name": "rib_right_10",
+      "at": 1.82,
+      "size": 96784.1932
+    },
+    {
+      "name": "rib_left_10",
+      "at": 1.865,
+      "size": 88201.3165
+    },
+    {
+      "name": "rib_right_9",
+      "at": 1.91,
+      "size": 99504.5795
+    },
+    {
+      "name": "vertebrae_T11",
+      "at": 1.955,
+      "size": 84989.0935
+    },
+    {
+      "name": "rib_left_9",
+      "at": 2,
+      "size": 103726.8357
+    },
+    {
+      "name": "rib_right_8",
+      "at": 2.045,
+      "size": 98702.9927
+    },
+    {
+      "name": "vertebrae_T10",
+      "at": 2.09,
+      "size": 86184.2531
+    },
+    {
+      "name": "rib_left_8",
+      "at": 2.135,
+      "size": 97883.1208
+    },
+    {
+      "name": "rib_right_7",
+      "at": 2.18,
+      "size": 94901.2591
+    },
+    {
+      "name": "costal_cartilages",
+      "at": 2.225,
+      "size": 93329.3246
+    },
+    {
+      "name": "vertebrae_T9",
+      "at": 2.27,
+      "size": 91232.1438
+    },
+    {
+      "name": "rib_left_7",
+      "at": 2.315,
+      "size": 90888.051
+    },
+    {
+      "name": "rib_right_6",
+      "at": 2.36,
+      "size": 88380.5882
+    },
+    {
+      "name": "vertebrae_T8",
+      "at": 2.405,
+      "size": 96734.2667
+    },
+    {
+      "name": "humerus_right",
+      "at": 2.45,
+      "size": 68724.5643
+    },
+    {
+      "name": "rib_left_6",
+      "at": 2.495,
+      "size": 88645.3704
+    },
+    {
+      "name": "humerus_left",
+      "at": 2.54,
+      "size": 70680.9325
+    },
+    {
+      "name": "sternum",
+      "at": 2.585,
+      "size": 71412.5704
+    },
+    {
+      "name": "rib_right_5",
+      "at": 2.63,
+      "size": 84080.5503
+    },
+    {
+      "name": "vertebrae_T7",
+      "at": 2.675,
+      "size": 96027.6513
+    },
+    {
+      "name": "rib_left_5",
+      "at": 2.72,
+      "size": 91213.3886
+    },
+    {
+      "name": "rib_right_4",
+      "at": 2.765,
+      "size": 83569.1104
+    },
+    {
+      "name": "vertebrae_T6",
+      "at": 2.81,
+      "size": 97644.14
+    },
+    {
+      "name": "rib_left_4",
+      "at": 2.855,
+      "size": 88739.3727
+    },
+    {
+      "name": "vertebrae_T5",
+      "at": 2.9,
+      "size": 91365.5071
+    },
+    {
+      "name": "rib_left_3",
+      "at": 2.945,
+      "size": 89270.7854
+    },
+    {
+      "name": "rib_right_3",
+      "at": 2.99,
+      "size": 84395.3874
+    },
+    {
+      "name": "vertebrae_T4",
+      "at": 3.035,
+      "size": 92320.6435
+    },
+    {
+      "name": "rib_right_2",
+      "at": 3.08,
+      "size": 86314.6032
+    },
+    {
+      "name": "scapula_right",
+      "at": 3.125,
+      "size": 90302.6841
+    },
+    {
+      "name": "rib_left_2",
+      "at": 3.17,
+      "size": 88298.0323
+    },
+    {
+      "name": "vertebrae_T3",
+      "at": 3.215,
+      "size": 91647.2337
+    },
+    {
+      "name": "rib_right_1",
+      "at": 3.26,
+      "size": 94047.1857
+    },
+    {
+      "name": "rib_left_1",
+      "at": 3.305,
+      "size": 91585.8025
+    },
+    {
+      "name": "scapula_left",
+      "at": 3.35,
+      "size": 100386.9915
+    },
+    {
+      "name": "vertebrae_T2",
+      "at": 3.395,
+      "size": 99428.6597
+    },
+    {
+      "name": "vertebrae_T1",
+      "at": 3.44,
+      "size": 94681.9363
+    },
+    {
+      "name": "clavicula_right",
+      "at": 3.485,
+      "size": 101795.5086
+    },
+    {
+      "name": "clavicula_left",
+      "at": 3.53,
+      "size": 100592.5321
+    },
+    {
+      "name": "vertebrae_C7",
+      "at": 3.575,
+      "size": 85746.3152
+    },
+    {
+      "name": "vertebrae_C6",
+      "at": 3.62,
+      "size": 91949.028
+    },
+    {
+      "name": "vertebrae_C5",
+      "at": 3.665,
+      "size": 91828.7764
+    },
+    {
+      "name": "vertebrae_C4",
+      "at": 3.71,
+      "size": 93477.5944
+    },
+    {
+      "name": "vertebrae_C3",
+      "at": 3.755,
+      "size": 90233.4301
+    },
+    {
+      "name": "vertebrae_C2",
+      "at": 3.8,
+      "size": 100348.5001
+    },
+    {
+      "name": "vertebrae_C1",
+      "at": 3.845,
+      "size": 78072.709
+    },
+    {
+      "name": "skull",
+      "at": 3.89,
+      "size": 93292.027
+    }
+  ]
+}

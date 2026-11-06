@@ -130,6 +130,33 @@ So: byte-identity is a **per-backend** invariant. Golden frames are pinned to
 a machine + GPU combination; across backends the invariant is perceptual
 equality, not equality of bytes.
 
+## The sound of the assembly
+
+`tools/make-sound.mjs` synthesises the clatter of the bones landing - no sample
+library, no licensing, and the hits are placed where the bones actually land.
+
+```
+make sound RECIPE=recipes/skeleton-pile.json NAME=skeleton-pile
+make film  RECIPE=recipes/skeleton-pile.json OUT=out/skeleton-pile NAME=skeleton-pile
+```
+
+How it stays in sync:
+
+- the bone list and its order are read from the **asset itself** (the GLB JSON
+  chunk: the system's descendants, the world centre of each bone from the
+  accessor min/max) and sorted by height - the same comparator the scene uses,
+  so the first hit is the femur and the last one is the skull;
+- the landing time of a bone is `assemble_start + orderIndex * sequence_step +
+  sequence_duration` - the very moment the bone reaches its anatomical place;
+- every clack is a deterministic function of the bone's size (a bigger bone
+  lands lower and louder), with a seeded PRNG, so the file is reproducible;
+- the WAV is written together with `assets/<name>.hits.json` - the timeline of
+  hits, readable by an agent.
+
+Measured: 63 bones, 63 hits, first at 1.100 s, last at 3.890 s, integrated
+loudness -15.7 LUFS. The silence before the first hit is a quiet room tone, so
+the film does not start with digital silence.
+
 ## DaVinci Resolve stage (verified 2026-11-06)
 
 The film leaves this pipeline as a single video file, not as a PNG sequence.
