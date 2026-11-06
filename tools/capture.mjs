@@ -258,6 +258,12 @@ async function main() {
   const puppeteer = (await import("puppeteer-core")).default;
   const framesDir = path.join(outDir, "frames");
   fs.mkdirSync(framesDir, { recursive: true });
+  /* Stale frames from a previous, longer render would silently end up in the
+     next video: the encoder reads a numbered sequence, so leftovers look like
+     extra frames of this film. */
+  for (const file of fs.readdirSync(framesDir)) {
+    if (/^frame-\d+\.(png|jpg)$/.test(file)) fs.unlinkSync(path.join(framesDir, file));
+  }
 
   const query = new URLSearchParams();
   for (const [k, v] of Object.entries(variables)) query.set(k, String(v));
@@ -356,7 +362,15 @@ async function main() {
     const probe = spawnSync("which", [ffmpegBin], { encoding: "utf8" });
     if (probe.status === 0) {
       const out = path.join(outDir, "film.mp4");
-      const args = ["-y", "-framerate", String(fps), "-i", path.join(framesDir, "frame-%05d." + (jpegQuality ? "jpg" : "png"))];
+      const args = [
+        "-y",
+        "-framerate",
+        String(fps),
+        "-i",
+        path.join(framesDir, "frame-%05d." + (jpegQuality ? "jpg" : "png")),
+        "-frames:v",
+        String(all.length),
+      ];
       if (jpegQuality) args.push("-q:v", "4");
       else args.push("-pix_fmt", "yuv420p", "-preset", "slow", "-crf", "18");
       args.push(out);

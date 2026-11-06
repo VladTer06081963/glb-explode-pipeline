@@ -12,7 +12,18 @@
   data-composition-variables='[
     { "id": "model_url", "type": "string", "role": "content", "label": "Model URL (.glb or .gltf)", "description": "Path or URL of the model. Named mesh nodes become the parts.", "default": "" },
     { "id": "labels", "type": "string", "role": "content", "label": "Labels (comma separated part names)", "default": "" },
-    { "id": "explode_field", "type": "string", "role": "motion", "label": "Explode field", "description": "radial | hierarchical | symmetric-fan", "default": "radial" },
+    { "id": "explode_field", "type": "string", "role": "motion", "label": "Explode field", "description": "radial | hierarchical | symmetric-fan | pile", "default": "radial" },
+    { "id": "systems", "type": "string", "role": "content", "label": "Systems (comma separated)", "description": "Keep only parts under these root nodes (e.g. skeleton). Empty = all parts.", "default": "" },
+    { "id": "start_state", "type": "string", "role": "motion", "label": "Start state", "description": "assembled | pile — the pose the film starts from (pile needs explode_field=pile)", "default": "assembled" },
+    { "id": "assemble_start", "type": "number", "role": "motion", "label": "Assembly start (s)", "default": 0.8, "min": 0, "step": 0.1 },
+    { "id": "sequence_step", "type": "number", "role": "motion", "label": "Stagger per part (s)", "description": "Delay between two consecutive parts", "default": 0.045, "min": 0, "step": 0.005 },
+    { "id": "sequence_duration", "type": "number", "role": "motion", "label": "Motion per part (s)", "default": 0.3, "min": 0.02, "step": 0.02 },
+    { "id": "pile_radius", "type": "number", "role": "motion", "label": "Pile radius (fraction of body height)", "default": 0.32, "min": 0.05, "max": 1, "step": 0.02 },
+    { "id": "pile_heap", "type": "number", "role": "motion", "label": "Pile heap (fraction of body height)", "default": 0.1, "min": 0, "max": 0.4, "step": 0.01 },
+    { "id": "pile_top_part", "type": "string", "role": "motion", "label": "Part on top of the pile", "default": "skull" },
+    { "id": "camera_pull_start", "type": "number", "role": "camera", "label": "Camera pull start (s)", "default": 0.3, "min": 0, "step": 0.1 },
+    { "id": "camera_pull_duration", "type": "number", "role": "camera", "label": "Camera pull duration (s)", "default": 2.4, "min": 0.1, "step": 0.1 },
+    { "id": "stage", "type": "string", "role": "style", "label": "Stage", "description": "none | studio — floor, gradient backdrop and soft shadows", "default": "none" },
     { "id": "explode_amount", "type": "number", "role": "motion", "label": "Explode amount", "default": 1.1, "min": 0, "max": 3, "step": 0.05 },
     { "id": "explode_start", "type": "number", "role": "motion", "label": "Explode start (s)", "default": 0.5, "min": 0, "step": 0.1 },
     { "id": "explode_duration", "type": "number", "role": "motion", "label": "Explode duration (s)", "default": 1.5, "min": 0.1, "step": 0.1 },
@@ -81,6 +92,17 @@
           model_url: "",
           labels: "",
           explode_field: "radial",
+          systems: "",
+          start_state: "assembled",
+          assemble_start: 0.8,
+          sequence_step: 0.045,
+          sequence_duration: 0.3,
+          pile_radius: 0.32,
+          pile_heap: 0.1,
+          pile_top_part: "skull",
+          camera_pull_start: 0.3,
+          camera_pull_duration: 2.4,
+          stage: "none",
           explode_amount: 1.1,
           explode_start: 0.5,
           explode_duration: 1.5,
@@ -180,6 +202,61 @@
       fill.position.set(3, 1, -2);
       scene.add(fill);
 
+      /* ---------- stage ----------
+         A dark studio: a vertical gradient backdrop, a matte floor at y=0 and
+         soft shadows. The bones lie on that floor in the pile, so the floor
+         is what makes the heap read as a heap and not as floating debris. */
+      const STAGE = (V.stage || "none").toLowerCase();
+      if (STAGE === "studio") {
+        const gradCanvas = document.createElement("canvas");
+        gradCanvas.width = 8;
+        gradCanvas.height = 512;
+        const g2 = gradCanvas.getContext("2d");
+        const gradient = g2.createLinearGradient(0, 0, 0, 512);
+        gradient.addColorStop(0, "#0b1120");
+        gradient.addColorStop(0.55, "#080b14");
+        gradient.addColorStop(1, "#04060b");
+        g2.fillStyle = gradient;
+        g2.fillRect(0, 0, 8, 512);
+        const backdrop = new THREE.CanvasTexture(gradCanvas);
+        backdrop.colorSpace = THREE.SRGBColorSpace;
+        scene.background = backdrop;
+
+        const floor = new THREE.Mesh(
+          new THREE.PlaneGeometry(60, 60),
+          new THREE.MeshStandardMaterial({ color: 0x05070d, roughness: 1.0, metalness: 0.0 })
+        );
+        /* Fog hides the far edge of the floor: the room fades into the
+           backdrop instead of ending at a hard horizon line. */
+        scene.fog = new THREE.Fog(0x080b14, 3.5, 14);
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -0.002;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        /* Studio light: one strong key with a soft shadow, a dim fill, and a
+           much dimmer ambient than the default - the bones have to read as
+           lit objects on a dark floor, not as flat white shapes. */
+        scene.children.forEach((child) => {
+          if (child.isHemisphereLight) child.intensity = 0.55;
+        });
+        key.intensity = 3.4;
+        fill.intensity = 0.5;
+
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        key.castShadow = true;
+        key.shadow.mapSize.set(2048, 2048);
+        key.shadow.camera.left = -1.8;
+        key.shadow.camera.right = 1.8;
+        key.shadow.camera.top = 1.8;
+        key.shadow.camera.bottom = -1.8;
+        key.shadow.camera.near = 0.5;
+        key.shadow.camera.far = 14;
+        key.shadow.bias = -0.0009;
+        key.shadow.normalBias = 0.012;
+      }
+
       const loader = new GLTFLoader();
       loader.setMeshoptDecoder(MeshoptDecoder);
 
@@ -187,23 +264,48 @@
       const parts = [];
       let modelRoot = null;
 
-      function collectParts(node, parent) {
+      /* Which parts of the model are kept. A GLB body is built from named
+         systems (skeleton, muscle, organs...); a film about bones needs the
+         skeleton only. Parts outside the filter are hidden, not deleted, so
+         the asset on disk stays the single source of truth. */
+      let SYSTEM_FILTER = (V.systems || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      function collectParts(node, parent, chain, isModelRoot) {
         node.updateMatrixWorld(true);
-        node.traverse((child) => {
-          if (child.isMesh && child.name) {
-            const box = new THREE.Box3().setFromObject(child);
-            const center = box.getCenter(new THREE.Vector3());
-            modelRoot.worldToLocal(center);
-            parts.push({
-              node: child,
-              name: child.name,
-              parent: parent && parent.name ? parent.name : "",
-              center: center,
-              base: child.position.clone(),
-              size: box.getSize(new THREE.Vector3()).length(),
-            });
-          }
-        });
+        const name = node.name || "";
+        const nextChain = chain ? chain.concat(name ? [name] : []) : name ? [name] : [];
+        const ancestors = nextChain.slice(0, -1);
+        const keep =
+          SYSTEM_FILTER.length === 0 ||
+          isModelRoot ||
+          SYSTEM_FILTER.includes(name) ||
+          ancestors.some((a) => SYSTEM_FILTER.includes(a));
+        if (!keep) {
+          node.visible = false;
+          return;
+        }
+        if (node.isMesh && name) {
+          const box = new THREE.Box3().setFromObject(node);
+          const center = box.getCenter(new THREE.Vector3());
+          modelRoot.worldToLocal(center);
+          parts.push({
+            node: node,
+            name: name,
+            parent: parent && parent.name ? parent.name : "",
+            chain: ancestors,
+            center: center,
+            base: node.position.clone(),
+            size: box.getSize(new THREE.Vector3()).length(),
+            worldPos: node.getWorldPosition(new THREE.Vector3()),
+            worldQuat: node.getWorldQuaternion(new THREE.Quaternion()),
+            worldBox: box.clone(),
+          });
+        }
+        const children = node.children ? node.children.slice() : [];
+        children.forEach((child) => collectParts(child, node, nextChain, false));
       }
 
       /* Asset URLs are resolved against the project root, not against the
@@ -219,7 +321,7 @@
         const gltf = await loader.loadAsync(modelUrl);
         modelRoot = gltf.scene;
         scene.add(modelRoot);
-        collectParts(modelRoot, null);
+        collectParts(modelRoot, null, null, true);
       } else {
         // Built-in fallback: a simple three-part object so the block is testable
         // without an asset.
@@ -232,7 +334,176 @@
           modelRoot.add(mesh);
         });
         scene.add(modelRoot);
-        collectParts(modelRoot, null);
+        // The built-in fallback has no systems: the filter does not apply.
+        SYSTEM_FILTER = [];
+        collectParts(modelRoot, null, null, true);
+      }
+
+      /* ---------- helpers ---------- */
+      const _inv = new THREE.Matrix4();
+      const _pq = new THREE.Quaternion();
+      /* Set a node by its WORLD transform. The parts live under a system
+         group, so a world pose has to be converted into the parent space. */
+      function setWorldTransform(node, worldPos, worldQuat) {
+        const parent = node.parent;
+        if (!parent) {
+          node.position.copy(worldPos);
+          node.quaternion.copy(worldQuat);
+          return;
+        }
+        parent.updateMatrixWorld(true);
+        _inv.copy(parent.matrixWorld).invert();
+        node.position.copy(worldPos).applyMatrix4(_inv);
+        parent.getWorldQuaternion(_pq).invert();
+        node.quaternion.copy(_pq).multiply(worldQuat);
+      }
+      function smoothstep01(x) {
+        const k = Math.min(1, Math.max(0, x));
+        return k * k * (3 - 2 * k);
+      }
+      function lerpBox(a, b, t) {
+        const min = new THREE.Vector3().lerpVectors(a.min, b.min, t);
+        const max = new THREE.Vector3().lerpVectors(a.max, b.max, t);
+        return new THREE.Box3(min, max);
+      }
+      /* Live world box of the visible parts only. Box3.setFromObject() would
+         also count the hidden systems (it ignores `visible`), which would
+         frame the camera around organs the film does not show. */
+      function partsBox() {
+        const box = new THREE.Box3();
+        parts.forEach((p) => {
+          p.node.updateWorldMatrix(true, false);
+          const g = p.node.geometry;
+          if (!g) return;
+          if (!g.boundingBox) g.computeBoundingBox();
+          box.union(g.boundingBox.clone().applyMatrix4(p.node.matrixWorld));
+        });
+        return box;
+      }
+      function hashSeed(str) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 16777619) >>> 0;
+        }
+        return h >>> 0;
+      }
+      function mulberry32(a) {
+        return function () {
+          a |= 0;
+          a = (a + 0x6d2b79f5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      /* ---------- pile: a heap of bones on the floor ----------
+         Every part gets its own deterministic place in the heap (pseudo-random
+         from its name, so the heap is identical on every run), lies flat, and
+         the skull is put on top of the heap. The assembly then moves the
+         parts one by one into their anatomical pose: feet first, head last. */
+      const PILE = (V.explode_field || "").toLowerCase() === "pile";
+      const START_FROM_PILE = (V.start_state || "assembled").toLowerCase() === "pile";
+      let pileBox = null;
+      let assemblyOrder = [];
+      let pileBodyH = 0;
+
+      if (PILE) {
+        const bodyBox = new THREE.Box3();
+        parts.forEach((p) => bodyBox.union(p.worldBox));
+        const bodyH = Math.max(1e-4, bodyBox.max.y - bodyBox.min.y);
+        pileBodyH = bodyH;
+        const bodyCenter = bodyBox.getCenter(new THREE.Vector3());
+        const pileR = Math.max(1e-4, (Number(V.pile_radius) || 0.32) * bodyH);
+        const heapH = Math.max(0, (Number(V.pile_heap) || 0.1) * bodyH);
+
+        parts.forEach((p) => {
+          const size = p.worldBox.getSize(new THREE.Vector3());
+          const dims = [size.x, size.y, size.z];
+          p.pileThick = Math.max(1e-4, Math.min(dims[0], dims[1], dims[2]));
+          const longIdx = dims.indexOf(Math.max(dims[0], dims[1], dims[2]));
+          const rnd = mulberry32(hashSeed(p.name));
+          const u1 = rnd(), u2 = rnd(), u3 = rnd(), u4 = rnd(), u5 = rnd(), u6 = rnd();
+          const angle = u1 * Math.PI * 2;
+          const radius = pileR * Math.sqrt(u2) * 0.9;
+          const mound = heapH * (1 - (radius / pileR) * (radius / pileR)) * 0.5;
+          // Lie flat: the longest axis of the bone becomes horizontal.
+          const qLie = new THREE.Quaternion();
+          if (longIdx === 1) qLie.setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+          const qYaw = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), u4 * Math.PI * 2);
+          const qTilt = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler((u5 - 0.5) * 0.45, 0, (u6 - 0.5) * 0.45)
+          );
+          p.pileQuat = qYaw.clone().multiply(qTilt).multiply(qLie).multiply(p.worldQuat);
+          p.pilePos = new THREE.Vector3(
+            bodyCenter.x + Math.cos(angle) * radius,
+            p.pileThick * 0.5 + mound + u3 * 0.004 * bodyH,
+            bodyCenter.z + Math.sin(angle) * radius
+          );
+          p.pileArc = (0.04 + 0.14 * u5) * bodyH;
+        });
+
+        /* The head lies on top of the heap. */
+        const topName = (V.pile_top_part || "skull").trim();
+        const top = parts.find((p) => p.name === topName);
+        if (top) {
+          let heapTop = 0;
+          parts.forEach((p) => {
+            if (p !== top) heapTop = Math.max(heapTop, p.pilePos.y + p.pileThick * 0.5);
+          });
+          const rnd = mulberry32(hashSeed(topName + "-on-top"));
+          const jx = (rnd() - 0.5) * 0.08 * bodyH;
+          const jz = (rnd() - 0.5) * 0.08 * bodyH;
+          top.pilePos.set(
+            bodyCenter.x + jx,
+            heapTop + top.pileThick * 0.5 + 0.002 * bodyH,
+            bodyCenter.z + jz
+          );
+        }
+
+        /* Assembly order: the lowest bone first, the head last. */
+        assemblyOrder = parts
+          .slice()
+          .sort((a, b) => a.worldPos.y - b.worldPos.y || (a.name < b.name ? -1 : 1));
+        assemblyOrder.forEach((p, i) => {
+          p.orderIndex = i;
+        });
+
+        const assembledBox = new THREE.Box3();
+        parts.forEach((p) => setWorldTransform(p.node, p.worldPos, p.worldQuat));
+        assembledBox.copy(partsBox());
+        parts.forEach((p) => setWorldTransform(p.node, p.pilePos, p.pileQuat));
+        pileBox = partsBox();
+      }
+
+      const assemblyStart = Number(V.assemble_start) || 0;
+      const sequenceStep = Math.max(0, Number(V.sequence_step) || 0);
+      const sequenceDuration = Math.max(0.02, Number(V.sequence_duration) || 0.3);
+
+      /* The assembly: every part flies from the heap into its anatomical
+         place, one after another. Pure function of time: the pose at t never
+         depends on the pose at t-1. */
+      function applyPile(t) {
+        parts.forEach((p) => {
+          const t0 = assemblyStart + p.orderIndex * sequenceStep;
+          const k = easeInOutCubic(Math.min(1, Math.max(0, (t - t0) / sequenceDuration)));
+          const fromPos = START_FROM_PILE ? p.pilePos : p.worldPos;
+          const toPos = START_FROM_PILE ? p.worldPos : p.pilePos;
+          const fromQuat = START_FROM_PILE ? p.pileQuat : p.worldQuat;
+          const toQuat = START_FROM_PILE ? p.worldQuat : p.pileQuat;
+          const pos = fromPos.clone().lerp(toPos, k);
+          pos.y += Math.sin(Math.PI * k) * p.pileArc;
+          const quat = fromQuat.clone().slerp(toQuat, k);
+          setWorldTransform(p.node, pos, quat);
+        });
+      }
+
+      if (STAGE === "studio") {
+        parts.forEach((p) => {
+          p.node.castShadow = true;
+          p.node.receiveShadow = true;
+        });
       }
 
       /* ---------- explode field ---------- */
@@ -329,6 +600,10 @@
       });
 
       function applyExplode(t) {
+        if (PILE) {
+          applyPile(t);
+          return;
+        }
         const raw = Math.min(1, Math.max(0, explodeProgress(t)));
         plan.forEach((item) => {
           const window = Math.max(1e-6, 1 - item.delay);
@@ -385,7 +660,7 @@
         // exploded pose is measured in the stale (assembled) transforms and the
         // camera never pulls back.
         modelRoot.updateMatrixWorld(true);
-        const box = new THREE.Box3().setFromObject(modelRoot);
+        const box = partsBox();
         const sphere = box.getBoundingSphere(new THREE.Sphere());
         return { center: sphere.center.clone(), radius: sphere.radius, box: box.clone() };
       }
@@ -405,7 +680,7 @@
          CT occupies ~25 % of the width but 100 % of the height). */
       function currentBox() {
         modelRoot.updateMatrixWorld(true);
-        return new THREE.Box3().setFromObject(modelRoot);
+        return partsBox();
       }
 
       /* Distance at which every corner of `box` projects inside the frustum.
@@ -436,18 +711,44 @@
       function updateCamera(t) {
         applyExplode(t);
         const box = currentBox();
-        const center = poseFixed ? poseFixed.center : box.getCenter(new THREE.Vector3());
         camera.fov = Number(V.camera_fov) || 38;
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
         const orbit = ((Number(V.camera_orbit) || 0) * Math.PI) / 180;
+        /* While the heap is on the floor the camera looks at it from lower:
+           a heap is flat, and a high camera foreshortens it into a disc. */
+        const pileBlend = PILE
+          ? smoothstep01(
+              (t - (Number(V.camera_pull_start) || 0)) / Math.max(1e-6, Number(V.camera_pull_duration) || 2.4)
+            )
+          : 1;
         const dir = new THREE.Vector3(
           Math.sin(orbit) * 0.62 + 0.55,
-          0.35,
+          0.24 + 0.11 * pileBlend,
           Math.cos(orbit) * 0.75
         ).normalize();
-        const fitBox = poseFixed ? poseFixed.box : box;
-        const distance = fitDistance(fitBox, dir, camera.fov, camera.aspect, MARGIN);
+        let fitBox = poseFixed ? poseFixed.box : box;
+        let center = poseFixed ? poseFixed.center : box.getCenter(new THREE.Vector3());
+        if (PILE) {
+          // Start tight on the heap, then pull back so the standing skeleton
+          // fits into the same frame.
+          const blend = pileBlend;
+          const union = box.clone().union(pileBox);
+          fitBox = lerpBox(box, union, blend);
+          center = fitBox.getCenter(new THREE.Vector3());
+          // The heap is flat: in a tall frame it would sit in the middle of
+          // the picture. Look slightly above it, so it rests in the lower third
+          // and the empty space above reads as the room the skeleton will grow
+          // into.
+          center.y += (1 - blend) * pileBodyH * 0.18;
+        }
+        /* The corners of the heap's bounding box are empty air, so the heap is
+           framed tighter than a box fit would give: the film opens on the
+           heap, and the heap has to fill the frame. */
+        const fitMargin = PILE
+          ? MARGIN * (0.84 + 0.16 * pileBlend)
+          : MARGIN;
+        const distance = fitDistance(fitBox, dir, camera.fov, camera.aspect, fitMargin);
         camera.position.copy(center).addScaledVector(dir, distance);
         camera.lookAt(center);
         camera.updateMatrixWorld();
@@ -563,6 +864,13 @@
         renderer: renderer,
         applyExplode: applyExplode,
         explodeProgress: explodeProgress,
+        pile: PILE
+          ? {
+              pileBox: pileBox,
+              order: assemblyOrder.map((p) => p.name),
+              top: (V.pile_top_part || "skull"),
+            }
+          : null,
         partPositions: function () {
           const out = {};
           parts.forEach(function (p) {
