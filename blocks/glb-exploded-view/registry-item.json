@@ -3,8 +3,22 @@
   "name": "glb-exploded-view",
   "type": "hyperframes:block",
   "title": "GLB Exploded View",
-  "description": "Load a GLB or glTF model, take its named mesh nodes as parts, and explode or reassemble them as a pure function of time. Supports meshopt-compressed models, a cutaway plane and labels pinned to live world positions.",
-  "tags": ["3d-object", "three-js", "webgl", "glb", "exploded-view", "cutaway", "labels", "product", "anatomy"],
+  "description": "Load a GLB or glTF model, take its named mesh nodes as parts, and explode, pile or reassemble them as a pure function of time. Supports meshopt-compressed models, a system filter (show one body system only), a heap-of-bones mode with a bone-by-bone assembly, a studio stage with floor and soft shadows, a cutaway plane and labels pinned to live world positions.",
+  "tags": [
+    "3d-object",
+    "three-js",
+    "webgl",
+    "glb",
+    "exploded-view",
+    "cutaway",
+    "labels",
+    "product",
+    "anatomy",
+    "skeleton",
+    "pile",
+    "assemble",
+    "studio"
+  ],
   "dimensions": {
     "width": 1920,
     "height": 1080
