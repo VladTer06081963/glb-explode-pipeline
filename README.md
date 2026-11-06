@@ -76,6 +76,16 @@ The recipe is the API an agent edits:
 | `cutaway_position` | `0` | plane position, −1…1 |
 | `labels` | — | comma-separated part names to label |
 | `background` | `#05070d` | background colour |
+| `systems` | — | keep only the parts under these root nodes (`skeleton`) |
+| `explode_field` | `radial` | add `pile` — a heap on the floor, the parts assemble out of it |
+| `start_state` | `assembled` | `pile` — the film opens on the heap |
+| `assemble_start` / `sequence_step` / `sequence_duration` | `0.8` / `0.045` / `0.3` | the assembly |
+| `assembly_step_beats` | `0` | stagger per part **in beats** of the music grid |
+| `music_bpm` / `beat_offset` | `120` / `0` | the beat grid the assembly and the dance follow |
+| `dance_amount` / `dance_start` / `dance_end` / `dance_fade` | `0` | the beat dance |
+| `disassemble_start` / `disassemble_step` / `disassemble_duration` | `0` / `0` / `0.35` | the way back into the heap |
+| `title_text` / `title_start` / `title_end` / `title_fade` / `title_y` | — / `0` / `0` / `0.5` / `50` | the title over the scene |
+| `stage` | `none` | `studio` — floor, gradient backdrop and soft shadows |
 
 ## Assets
 
@@ -158,6 +168,39 @@ to the joint it belongs to), so the same code dances with any
 skeleton-shaped asset. The camera keeps a steady frame: its fit is measured
 on the assembly pose, without the dance, so it does not breathe with every
 bounce.
+
+## The way back: the heap again
+
+`disassemble_start` runs the same clock backwards. The parts leave in the
+reverse order of their arrival - the last bone to be assembled is the first
+to fall - and the pose they leave from is frozen at that moment, so the
+dance stops where it was when the first bone dropped.
+
+```
+"disassemble_start": 16.0,      // seconds, 0 = never
+"disassemble_step": 0.09,       // stagger per part, 0 = same as the assembly
+"disassemble_duration": 0.3     // flight of one part back to the heap
+```
+
+The camera follows: while the heap is the subject it frames the heap, and as
+the bones fall back it comes down and tightens on the heap again. The film
+ends where it started.
+
+The sound follows too: `tools/make-sound.mjs` places a landing hit for every
+bone of the fall (`phase: "down"` in `assets/<name>.hits.json`), so the
+breakdown of the track carries the clatter.
+
+## The title
+
+`title_text` draws a title over the scene. It is HTML, not a texture: the
+letters are real text, they fade in and out on the clock, and a dark band
+behind them keeps the title readable where it crosses the subject.
+
+```
+"title_text": "БЕДНЫЙ ЙОРИК",
+"title_start": 10.6, "title_end": 15.2, "title_fade": 0.6,
+"title_y": 50          // height in the frame, in percent
+```
 
 ## The sound of the assembly
 

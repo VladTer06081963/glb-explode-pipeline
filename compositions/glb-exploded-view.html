@@ -28,6 +28,14 @@
     { "id": "pile_radius", "type": "number", "role": "motion", "label": "Pile radius (fraction of body height)", "default": 0.32, "min": 0.05, "max": 1, "step": 0.02 },
     { "id": "pile_heap", "type": "number", "role": "motion", "label": "Pile heap (fraction of body height)", "default": 0.1, "min": 0, "max": 0.4, "step": 0.01 },
     { "id": "pile_top_part", "type": "string", "role": "motion", "label": "Part on top of the pile", "default": "skull" },
+    { "id": "disassemble_start", "type": "number", "role": "motion", "label": "Disassemble start (s)", "description": "0 = never; after this time the parts fly back into the heap", "default": 0, "min": 0, "step": 0.25 },
+    { "id": "disassemble_step", "type": "number", "role": "motion", "label": "Disassemble stagger per part (s)", "description": "0 = same as the assembly stagger; the parts leave in reverse order", "default": 0, "min": 0, "step": 0.005 },
+    { "id": "disassemble_duration", "type": "number", "role": "motion", "label": "Disassemble motion per part (s)", "default": 0.35, "min": 0.02, "step": 0.02 },
+    { "id": "title_text", "type": "string", "role": "content", "label": "Title text", "default": "" },
+    { "id": "title_start", "type": "number", "role": "motion", "label": "Title start (s)", "default": 0, "min": 0, "step": 0.25 },
+    { "id": "title_end", "type": "number", "role": "motion", "label": "Title end (s)", "description": "0 = until the end of the film", "default": 0, "min": 0, "step": 0.25 },
+    { "id": "title_fade", "type": "number", "role": "motion", "label": "Title fade (s)", "default": 0.5, "min": 0.05, "step": 0.05 },
+    { "id": "title_y", "type": "number", "role": "style", "label": "Title height (% of the frame)", "default": 50, "min": 5, "max": 95, "step": 1 },
     { "id": "camera_pull_start", "type": "number", "role": "camera", "label": "Camera pull start (s)", "default": 0.3, "min": 0, "step": 0.1 },
     { "id": "camera_pull_duration", "type": "number", "role": "camera", "label": "Camera pull duration (s)", "default": 2.4, "min": 0.1, "step": 0.1 },
     { "id": "stage", "type": "string", "role": "style", "label": "Stage", "description": "none | studio — floor, gradient backdrop and soft shadows", "default": "none" },
@@ -82,6 +90,30 @@
         white-space: nowrap;
         pointer-events: none;
       }
+      .gev-title {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        color: #eef1f7;
+        font-family: "Lato Thin", "Lato Hairline", "Lato", "Helvetica Neue",
+          "DejaVu Sans", sans-serif;
+        font-weight: 200;
+        font-size: calc(76px * var(--gev-scale, 1));
+        letter-spacing: 0.38em;
+        /* the trailing letter-space would push the line off centre */
+        text-indent: 0.38em;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        /* The title crosses the subject, and the subject is bone white: a
+           dark band behind the letters is what keeps the title readable. */
+        padding: calc(14px * var(--gev-scale, 1)) calc(46px * var(--gev-scale, 1));
+        background: rgba(5, 7, 13, 0.62);
+        border-radius: calc(4px * var(--gev-scale, 1));
+        text-shadow: 0 calc(2px * var(--gev-scale, 1)) calc(20px * var(--gev-scale, 1))
+          rgba(0, 0, 0, 0.8);
+      }
     </style>
   </head>
   <body>
@@ -115,6 +147,14 @@
           pile_radius: 0.32,
           pile_heap: 0.1,
           pile_top_part: "skull",
+          disassemble_start: 0,
+          disassemble_step: 0,
+          disassemble_duration: 0.35,
+          title_text: "",
+          title_start: 0,
+          title_end: 0,
+          title_fade: 0.5,
+          title_y: 50,
           camera_pull_start: 0.3,
           camera_pull_duration: 2.4,
           stage: "none",
@@ -505,6 +545,26 @@
         : Math.max(0, Number(V.sequence_step) || 0);
       const sequenceDuration = Math.max(0.02, Number(V.sequence_duration) || 0.3);
 
+      /* ---------- the way back: the heap again ----------
+         The same clock, run backwards: the parts leave in the reverse order
+         of their arrival, so the last bone to be assembled is the first to
+         fall. Everything stays a pure function of time. */
+      const DIS_START = Number(V.disassemble_start) || 0;
+      const DIS_STEP_RAW = Number(V.disassemble_step) || 0;
+      const DIS_STEP = DIS_STEP_RAW > 0 ? DIS_STEP_RAW : sequenceStep;
+      const DIS_DUR = Math.max(0.02, Number(V.disassemble_duration) || 0.35);
+      const PART_COUNT = parts.length;
+      let frozenPose = null;
+      /** The dance pose frozen at the moment the parts start to leave: the
+          bones fall back from where they stood, not from where they dance. */
+      function frozenDancePose() {
+        if (!frozenPose) {
+          frozenPose = new Map();
+          updateDance(DIS_START, frozenPose);
+        }
+        return frozenPose;
+      }
+
 
       /* ---------- dance: the skeleton moves on the beat ----------
          The beat grid is the same clock as the music (music_bpm), so every
@@ -616,13 +676,19 @@
         return Math.min(up, down);
       }
 
-      /** The dance pose of every part at time t. Pure function of t. */
-      function updateDance(t) {
+      /** The dance pose of every part at time t. Pure function of t.
+          With `out` the result is written into a map instead of the parts,
+          so a pose can be frozen without disturbing the live one. */
+      function updateDance(t, out) {
+        const write = (p, pos, quat) => {
+          if (out) out.set(p.name, { pos: pos, quat: quat });
+          else {
+            p.dancePos = pos;
+            p.danceQuat = quat;
+          }
+        };
         if (!DANCE || suppressDance) {
-          parts.forEach((p) => {
-            p.dancePos = p.worldPos;
-            p.danceQuat = p.worldQuat;
-          });
+          parts.forEach((p) => write(p, p.worldPos, p.worldQuat));
           return;
         }
         const gain = DANCE_AMOUNT * danceGain(t);
@@ -707,28 +773,50 @@
             });
           }
           const moved = chainTransform(p.worldPos, p.worldQuat, chain);
-          p.dancePos = moved.p;
-          p.danceQuat = moved.q;
+          write(p, moved.p, moved.q);
         });
       }
 
       /* The assembly: every part flies from the heap into its anatomical
          place, one after another. Pure function of time: the pose at t never
          depends on the pose at t-1. */
+      /* How much of the film is already assembled: the camera frames the
+         heap and the growing skeleton together, and the standing skeleton
+         alone once it is whole. */
+      let assemblyProgress = PILE ? 0 : 1;
       function applyPile(t) {
         updateDance(t);
+        /* Once the way back has started, the pose the bones leave from is
+           frozen: the dance stops where it was when the first bone fell. */
+        const goingBack = DIS_START > 0 && t >= DIS_START;
+        const frozen = goingBack ? frozenDancePose() : null;
         parts.forEach((p) => {
           const t0 = assemblyStart + p.orderIndex * sequenceStep;
-          const k = easeInOutCubic(Math.min(1, Math.max(0, (t - t0) / sequenceDuration)));
+          const up = easeInOutCubic(Math.min(1, Math.max(0, (t - t0) / sequenceDuration)));
+          let k = up;
+          if (DIS_START > 0) {
+            const d0 = DIS_START + (PART_COUNT - 1 - p.orderIndex) * DIS_STEP;
+            const down = easeInOutCubic(Math.min(1, Math.max(0, (t - d0) / DIS_DUR)));
+            k = up * (1 - down);
+          }
+          const target = frozen
+            ? frozen.get(p.name) || { pos: p.worldPos, quat: p.worldQuat }
+            : { pos: p.dancePos || p.worldPos, quat: p.danceQuat || p.worldQuat };
           const fromPos = START_FROM_PILE ? p.pilePos : p.worldPos;
-          const toPos = START_FROM_PILE ? (p.dancePos || p.worldPos) : p.pilePos;
+          const toPos = START_FROM_PILE ? target.pos : p.pilePos;
           const fromQuat = START_FROM_PILE ? p.pileQuat : p.worldQuat;
-          const toQuat = START_FROM_PILE ? (p.danceQuat || p.worldQuat) : p.pileQuat;
+          const toQuat = START_FROM_PILE ? target.quat : p.pileQuat;
           const pos = fromPos.clone().lerp(toPos, k);
           pos.y += Math.sin(Math.PI * k) * p.pileArc;
           const quat = fromQuat.clone().slerp(toQuat, k);
           setWorldTransform(p.node, pos, quat);
         });
+        let landed = 0;
+        parts.forEach((p) => {
+          const t0 = assemblyStart + p.orderIndex * sequenceStep;
+          if (t >= t0 + sequenceDuration) landed += 1;
+        });
+        assemblyProgress = parts.length ? landed / parts.length : 1;
       }
 
       if (STAGE === "studio") {
@@ -958,11 +1046,18 @@
           180;
         /* While the heap is on the floor the camera looks at it from lower:
            a heap is flat, and a high camera foreshortens it into a disc. */
-        const pileBlend = PILE
+        const openingBlend = PILE
           ? smoothstep01(
               (t - (Number(V.camera_pull_start) || 0)) / Math.max(1e-6, Number(V.camera_pull_duration) || 2.4)
             )
           : 1;
+        /* When the parts fall back into the heap the camera comes down and
+           tightens on it again: the film returns to where it started. */
+        const closingBlend =
+          DIS_START > 0
+            ? smoothstep01((t - DIS_START) / Math.max(1e-6, DIS_DUR + DIS_STEP * PART_COUNT))
+            : 0;
+        const pileBlend = PILE ? openingBlend * (1 - closingBlend) : 1;
         const dir = new THREE.Vector3(
           Math.sin(orbit) * 0.62 + 0.55,
           0.24 + 0.11 * pileBlend,
@@ -971,9 +1066,10 @@
         let fitBox = poseFixed ? poseFixed.box : box;
         let center = poseFixed ? poseFixed.center : box.getCenter(new THREE.Vector3());
         if (PILE) {
-          // Start tight on the heap, then pull back so the standing skeleton
-          // fits into the same frame.
-          const blend = pileBlend;
+          // The heap and the growing skeleton share the frame while the
+          // skeleton is still being built. Once it is whole, the heap is out
+          // of the picture and the standing skeleton is framed alone.
+          const blend = Math.max(1 - smoothstep01(assemblyProgress), closingBlend);
           const union = box.clone().union(pileBox);
           fitBox = lerpBox(box, union, blend);
           center = fitBox.getCenter(new THREE.Vector3());
@@ -981,7 +1077,7 @@
           // the picture. Look slightly above it, so it rests in the lower third
           // and the empty space above reads as the room the skeleton will grow
           // into.
-          center.y += (1 - blend) * pileBodyH * 0.18;
+          center.y += (1 - openingBlend) * pileBodyH * 0.11;
         }
         /* The corners of the heap's bounding box are empty air, so the heap is
            framed tighter than a box fit would give: the film opens on the
@@ -1024,6 +1120,33 @@
         root.appendChild(el);
         labelEls.push({ el: el, part: part });
       });
+
+      /* ---------- title ---------- */
+      const titleEl = document.createElement("div");
+      titleEl.className = "gev-title";
+      titleEl.setAttribute("data-layout-allow-overlap", "");
+      root.appendChild(titleEl);
+      const TITLE_TEXT = (V.title_text || "").trim();
+      const TITLE_START = Number(V.title_start) || 0;
+      const TITLE_END = Number(V.title_end) || 0;
+      const TITLE_FADE = Math.max(0.05, Number(V.title_fade) || 0.5);
+      const TITLE_Y = Math.min(95, Math.max(5, Number(V.title_y) || 50));
+      titleEl.style.top = TITLE_Y + "%";
+      function updateTitle(t) {
+        if (!TITLE_TEXT) {
+          titleEl.style.opacity = "0";
+          return;
+        }
+        titleEl.textContent = TITLE_TEXT;
+        const up = Math.min(1, Math.max(0, (t - TITLE_START) / TITLE_FADE));
+        let down = 1;
+        if (TITLE_END > 0) down = Math.min(1, Math.max(0, (TITLE_END - t) / TITLE_FADE));
+        const gain = Math.min(up, down);
+        titleEl.style.opacity = String(gain);
+        /* the title settles in: it drifts the last few pixels and rests */
+        const drift = (1 - gain) * 22;
+        titleEl.style.transform = "translate(-50%, calc(-50% + " + drift + "px))";
+      }
 
       const v = new THREE.Vector3();
       // Labels must not cover each other: resolve collisions deterministically
@@ -1078,6 +1201,7 @@
         updateCamera(t);
         renderer.render(scene, camera);
         placeLabels();
+        updateTitle(t);
       };
       /* HyperFrames contract: the host dispatches `hf-seek` with the target
          time and renders the composition itself. We must draw from that time

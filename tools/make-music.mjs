@@ -204,7 +204,13 @@ function levelOf(bar) {
   if (bar === 1) return { hats: 1, pad: 0.5, kick: 0, snare: 0, bass: 0, pluck: 0, cutoff: 1100 };
   if (bar === 2) return { hats: 1, pad: 0.6, kick: 0.75, snare: 0, bass: 0.6, pluck: 0, cutoff: 1400 };
   if (bar <= 4) return { hats: 1, pad: 0.55, kick: 1, snare: 0.8, bass: 0.9, pluck: 0, cutoff: 1600 };
-  return { hats: 1, pad: 0.8, kick: 1, snare: 0.9, bass: 1, pluck: 0.7, cutoff: 2600 };
+  if (bar <= 7) return { hats: 1, pad: 0.8, kick: 1, snare: 0.9, bass: 1, pluck: 0.7, cutoff: 2600 };
+  /* A longer film needs somewhere to fall back to. The drums drop out and the
+     pad carries the last section - that is where the bones fall back into
+     the heap, and the clatter sits in the empty space. The last bar is the
+     crash that ends the film. */
+  if (bar >= bars - 1) return { hats: 1, pad: 0.85, kick: 1, snare: 0.95, bass: 1, pluck: 0.8, cutoff: 2600 };
+  return { hats: 0.6, pad: 0.7, kick: 0, snare: 0, bass: 0.25, pluck: 0.3, cutoff: 900 };
 }
 
 for (let bar = 0; bar < bars; bar++) {

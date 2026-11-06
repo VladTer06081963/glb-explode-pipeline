@@ -388,7 +388,12 @@ async function main() {
 }
 
 async function writeContactSheet(puppeteer, framesDir, outDir, all, w, h) {
-  const cells = all
+  /* A sheet with every frame of a long film is a document no browser can
+     hold, so the sheet samples the film evenly. */
+  const max = Number(flag("sheet-max", 36));
+  const stride = Math.max(1, Math.ceil(all.length / Math.max(1, max)));
+  const sampled = all.filter((f, i) => i % stride === 0 || i === all.length - 1);
+  const cells = sampled
     .map(
       (f) =>
         `<figure><img src="file://${path.join(framesDir, f.file)}"><figcaption>frame ${f.index} · t=${f.time.toFixed(2)}s · ${f.sha256.slice(

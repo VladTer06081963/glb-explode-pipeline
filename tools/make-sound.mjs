@@ -288,8 +288,32 @@ parts.forEach((part, index) => {
     left[start + i] += v * (0.5 - pan * 0.5) * 2 * 0.5;
     right[start + i] += v * (0.5 + pan * 0.5) * 2 * 0.5;
   }
-  hits.push({ name: part.name, at: Number(landAt.toFixed(4)), size: Number(part.size.toFixed(4)) });
+  hits.push({ name: part.name, at: Number(landAt.toFixed(4)), size: Number(part.size.toFixed(4)), phase: "up" });
 });
+
+/* The way back: the bones leave in the reverse order of their arrival and
+   every landing gets a hit of its own. The clatter of the fall is what
+   carries the last section of the film. */
+const disStart = Number(vars.disassemble_start ?? 0);
+if (disStart > 0) {
+  const disStepRaw = Number(vars.disassemble_step ?? 0);
+  const disStep = disStepRaw > 0 ? disStepRaw : step;
+  const disFlight = Number(vars.disassemble_duration ?? 0.35);
+  parts.forEach((part, index) => {
+    const landAt = disStart + (parts.length - 1 - index) * disStep + disFlight;
+    if (landAt > duration) return;
+    const clack = renderClack(rng, part.size);
+    const start = Math.round(landAt * SR);
+    const pan = (rng() * 2 - 1) * 0.45;
+    const gain = 0.3 + Math.min(0.26, part.size * 0.05);
+    for (let i = 0; i < clack.length && start + i < frames; i++) {
+      const v = clack[i] * gain;
+      left[start + i] += v * (0.5 - pan * 0.5) * 2 * 0.5;
+      right[start + i] += v * (0.5 + pan * 0.5) * 2 * 0.5;
+    }
+    hits.push({ name: part.name, at: Number(landAt.toFixed(4)), size: Number(part.size.toFixed(4)), phase: "down" });
+  });
+}
 
 /* The music: the same track the scene dances to. The bones duck it for a
    moment when they land, the way a real clatter sits on top of a track. */
